@@ -1,0 +1,49 @@
+{
+  "expo": {
+    "name": "Sanda",
+    "slug": "sanda",
+    "scheme": "sanda",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "tr.sanda.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSLocationWhenInUseUsageDescription": "Sana yakın üreticileri ve sana uygun teslimat seçeneklerini göstermek için konum bilgini kullanıyoruz.",
+        "NSCameraUsageDescription": "Ürün ve sertifika fotoğraflarını yüklemek için kameraya erişim gerekli.",
+        "NSPhotoLibraryUsageDescription": "Galeriden ürün ve sertifika görseli seçmek için erişim gerekli."
+      }
+    },
+    "android": {
+      "package": "tr.sanda.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#f7f5f0"
+      },
+      "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION", "CAMERA"]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "server"
+    },
+    "experiments": {
+      "typedRoutes": true
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-notifications",
+      "expo-localization",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Sana yakın üreticileri göstermek için konumunu kullanıyoruz."
+        }
+      ]
+    ]
+  }
+}

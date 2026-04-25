@@ -1,0 +1,5 @@
+{
+  "extends": "@sanda/config-typescript/base.json",
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
+}

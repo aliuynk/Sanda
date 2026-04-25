@@ -1,0 +1,4 @@
+{
+  "extends": "@sanda/config-typescript/base.json",
+  "include": ["src/**/*"]
+}

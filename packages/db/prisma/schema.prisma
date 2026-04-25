@@ -1,0 +1,1239 @@
+// =============================================================================
+// Sanda — Prisma schema
+// -----------------------------------------------------------------------------
+// This schema drives every data surface in the Sanda marketplace. It models
+// identities, multi-role access, sellers, products, harvest-level traceability,
+// geographic service areas (PostGIS), certifications with an explicit
+// verification lifecycle, orders with escrow-style payment state, shipments,
+// messaging, reviews, and platform moderation.
+//
+// Design principles:
+//   * Every monetary value is stored as an integer in the smallest currency
+//     unit (kuruş). Turkish Lira only — FX is handled in the application layer.
+//   * All timestamps are UTC.
+//   * Soft deletes are explicit via `archivedAt`; we never drop user data by
+//     default. Hard deletion requires an admin action.
+//   * Geospatial columns use PostGIS geometry types. Prisma models them via
+//     `Unsupported(...)` while raw SQL helpers live in @sanda/core.
+//   * Enums are preferred over free-form strings for any finite domain.
+// =============================================================================
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions", "relationJoins"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  directUrl  = env("DIRECT_URL")
+  extensions = [postgis, pgcrypto, citext]
+}
+
+// -----------------------------------------------------------------------------
+// Identity & access
+// -----------------------------------------------------------------------------
+
+enum UserRole {
+  BUYER
+  SELLER
+  ADMIN
+  SUPPORT
+  MODERATOR
+}
+
+enum UserStatus {
+  ACTIVE
+  PENDING_VERIFICATION
+  SUSPENDED
+  BANNED
+  DELETED
+}
+
+enum AuthProvider {
+  SMS_OTP
+  EMAIL_PASSWORD
+  GOOGLE
+  APPLE
+}
+
+/// An `Account` is the unit that logs in. A single Account may hold multiple
+/// roles (e.g. a farmer who is also a buyer) and link to multiple provider
+/// identities. The Account itself carries no commerce-specific state.
+model Account {
+  id                   String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  phone                String?       @unique
+  phoneVerifiedAt      DateTime?
+  email                String?       @unique @db.Citext
+  emailVerifiedAt      DateTime?
+  passwordHash         String?
+  preferredLocale      String        @default("tr")
+  status               UserStatus    @default(PENDING_VERIFICATION)
+  roles                UserRole[]    @default([BUYER])
+  lastLoginAt          DateTime?
+  lastLoginIp          String?       @db.Inet
+  failedLoginCount     Int           @default(0)
+  lockedUntil          DateTime?
+  twoFactorEnabled     Boolean       @default(false)
+  twoFactorSecret      String?
+  marketingOptIn       Boolean       @default(false)
+  termsAcceptedAt      DateTime?
+  termsVersion         String?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+  archivedAt           DateTime?
+
+  profile              UserProfile?
+  sellerProfile        SellerProfile?
+  addresses            Address[]
+  orders               Order[]
+  sessions             Session[]
+  otpCodes             OtpCode[]
+  authLinks            AuthLink[]
+  reviewsAuthored      Review[]       @relation("ReviewAuthor")
+  messagesSent         Message[]      @relation("MessageSender")
+  conversationsAsBuyer Conversation[] @relation("ConversationBuyer")
+  notifications        Notification[]
+  auditEvents          AuditEvent[]
+  cart                 Cart?
+  supportTickets       SupportTicket[]
+  devices              Device[]
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+/// Separate profile table so that we can PII-scrub or export it independently.
+model UserProfile {
+  accountId   String   @id @db.Uuid
+  firstName   String
+  lastName    String
+  displayName String?
+  avatarUrl   String?
+  dateOfBirth DateTime? @db.Date
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+}
+
+model Session {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  accountId      String   @db.Uuid
+  refreshTokenId String   @unique
+  userAgent      String?
+  ipAddress      String?  @db.Inet
+  expiresAt      DateTime
+  revokedAt      DateTime?
+  createdAt      DateTime @default(now())
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, revokedAt])
+  @@index([expiresAt])
+}
+
+/// A transient credential used for SMS/Email OTP authentication. Always hashed.
+model OtpCode {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  accountId     String?   @db.Uuid
+  channel       OtpChannel
+  destination   String    // E.164 phone or email address
+  codeHash      String
+  expiresAt     DateTime
+  consumedAt    DateTime?
+  attempts      Int       @default(0)
+  createdAt     DateTime  @default(now())
+  ipAddress     String?   @db.Inet
+
+  account Account? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+
+  @@index([destination, consumedAt])
+  @@index([expiresAt])
+}
+
+enum OtpChannel {
+  SMS
+  EMAIL
+}
+
+/// A federated identity link (Google/Apple). Always optional.
+model AuthLink {
+  id         String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  accountId  String       @db.Uuid
+  provider   AuthProvider
+  providerId String
+  createdAt  DateTime     @default(now())
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerId])
+  @@index([accountId])
+}
+
+/// Mobile / browser push device registration.
+model Device {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  accountId    String   @db.Uuid
+  platform     DevicePlatform
+  pushToken    String
+  appVersion   String?
+  locale       String?
+  lastSeenAt   DateTime @default(now())
+  createdAt    DateTime @default(now())
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([platform, pushToken])
+  @@index([accountId])
+}
+
+enum DevicePlatform {
+  IOS
+  ANDROID
+  WEB
+}
+
+// -----------------------------------------------------------------------------
+// Geography
+// -----------------------------------------------------------------------------
+
+/// The static list of Turkish provinces (il).
+model Province {
+  id        Int        @id
+  code      String     @unique          // plate code, e.g. "06"
+  nameTr    String
+  nameEn    String
+  region    TurkeyRegion
+  geometry  Unsupported("geometry(MultiPolygon, 4326)")?
+  centroid  Unsupported("geometry(Point, 4326)")?
+  districts District[]
+}
+
+enum TurkeyRegion {
+  MARMARA
+  AEGEAN
+  MEDITERRANEAN
+  CENTRAL_ANATOLIA
+  BLACK_SEA
+  EASTERN_ANATOLIA
+  SOUTHEASTERN_ANATOLIA
+}
+
+model District {
+  id         Int      @id
+  provinceId Int
+  nameTr     String
+  nameEn     String?
+  geometry   Unsupported("geometry(MultiPolygon, 4326)")?
+  centroid   Unsupported("geometry(Point, 4326)")?
+
+  province      Province       @relation(fields: [provinceId], references: [id])
+  addresses     Address[]
+  pickupLocations PickupLocation[]
+
+  @@unique([provinceId, nameTr])
+  @@index([provinceId])
+}
+
+/// A postal address — either a buyer's delivery address or a seller's pickup
+/// location. Geography is captured explicitly so that service-area matching
+/// can run without re-geocoding.
+model Address {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  accountId    String?  @db.Uuid
+  label        String?
+  recipient    String
+  phone        String
+  line1        String
+  line2        String?
+  districtId   Int
+  provinceCode String
+  postalCode   String?
+  notes        String?
+  location     Unsupported("geometry(Point, 4326)")?
+  isDefault    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  archivedAt   DateTime?
+
+  account    Account?   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  district   District   @relation(fields: [districtId], references: [id])
+  ordersShipTo Order[] @relation("OrderShippingAddress")
+  ordersBillTo Order[] @relation("OrderBillingAddress")
+
+  @@index([accountId])
+  @@index([districtId])
+}
+
+// -----------------------------------------------------------------------------
+// Sellers
+// -----------------------------------------------------------------------------
+
+enum SellerKind {
+  INDIVIDUAL_FARMER      // gerçek usulde vergilendirilmeyen çiftçi
+  REGISTERED_FARMER      // ÇKS kayıtlı, ticari
+  COOPERATIVE
+  SMALL_BUSINESS         // esnaf
+  COMPANY                // limited / a.ş.
+}
+
+enum SellerStatus {
+  DRAFT
+  PENDING_REVIEW
+  APPROVED
+  SUSPENDED
+  REJECTED
+}
+
+enum FulfillmentMode {
+  SHIPPING
+  PICKUP
+  FARM_VISIT
+}
+
+model SellerProfile {
+  id                    String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  accountId             String       @unique @db.Uuid
+  slug                  String       @unique
+  displayName           String
+  tagline               String?
+  story                 String?      @db.Text
+  kind                  SellerKind
+  status                SellerStatus @default(DRAFT)
+  taxNumber             String?
+  taxOffice             String?
+  nationalId            String?      // TC kimlik no, encrypted at rest
+  ciftciKayitNumber     String?      // ÇKS kayıt no
+  tradeRegistryNumber   String?      // MERSİS
+  mersisNumber          String?
+  iban                  String?
+  ibanHolder            String?
+  submerchantId         String?      // iyzico submerchant ref
+  contactEmail          String?      @db.Citext
+  contactPhone          String?
+  websiteUrl            String?
+  instagramHandle       String?
+  farmName              String?
+  farmSize              Decimal?     @db.Decimal(10, 2) // dönüm
+  farmDescription       String?      @db.Text
+  foundedYear           Int?
+  allowsFarmVisits      Boolean      @default(false)
+  farmVisitNotes        String?
+  farmLocation          Unsupported("geometry(Point, 4326)")?
+  farmAddressLine       String?
+  farmDistrictId        Int?
+  ratingAverage         Decimal      @default(0) @db.Decimal(3, 2)
+  ratingCount           Int          @default(0)
+  productCount          Int          @default(0)
+  orderCount            Int          @default(0)
+  approvedAt            DateTime?
+  suspendedAt           DateTime?
+  suspendedReason       String?
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+
+  account           Account             @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  media             SellerMedia[]
+  products          Product[]
+  certifications    Certification[]
+  serviceAreas      ServiceArea[]
+  pickupLocations   PickupLocation[]
+  farmVisitSlots    FarmVisitSlot[]
+  farmVisitBookings FarmVisitBooking[]
+  orders            Order[]
+  payouts           Payout[]
+  conversations     Conversation[]      @relation("ConversationSeller")
+  harvestBatches    HarvestBatch[]
+
+  @@index([status])
+  @@index([slug])
+  @@index([createdAt])
+}
+
+/// Seller-level media: farm photos, introduction video, gallery.
+model SellerMedia {
+  id         String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sellerId   String      @db.Uuid
+  kind       MediaKind
+  url        String
+  thumbUrl   String?
+  caption    String?
+  sortOrder  Int         @default(0)
+  createdAt  DateTime    @default(now())
+
+  seller SellerProfile @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+
+  @@index([sellerId, sortOrder])
+}
+
+enum MediaKind {
+  IMAGE
+  VIDEO
+  DOCUMENT
+}
+
+// -----------------------------------------------------------------------------
+// Service areas & fulfillment
+// -----------------------------------------------------------------------------
+
+/// A seller-defined rule describing where and how they can fulfill orders.
+/// The model is deliberately flexible: a polygon for local delivery, a province
+/// list for kargo, or a single point for pickup.
+model ServiceArea {
+  id               String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sellerId         String          @db.Uuid
+  name             String
+  mode             FulfillmentMode
+  // Coverage as province/district IDs (simpler queries, cheap storage).
+  provinceCodes    String[]        @default([])
+  districtIds      Int[]           @default([])
+  // Optional arbitrary polygon for hyper-local radii or custom zones.
+  polygon          Unsupported("geometry(MultiPolygon, 4326)")?
+  // For "within X km of farm" style coverage.
+  radiusMeters     Int?
+  carrier          ShippingCarrier?
+  shippingFee      Int             @default(0) // kuruş
+  freeShippingOver Int?
+  etaMinDays       Int?
+  etaMaxDays       Int?
+  minOrderAmount   Int             @default(0) // kuruş
+  notes            String?
+  isActive         Boolean         @default(true)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  seller SellerProfile @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+
+  @@index([sellerId])
+  @@index([mode, isActive])
+}
+
+enum ShippingCarrier {
+  YURTICI
+  MNG
+  ARAS
+  PTT
+  SURAT
+  HEPSIJET
+  SENDEO
+  KOLAYGELSIN
+  CUSTOM
+  SELLER_DELIVERY
+}
+
+/// A physical pickup location for a seller (their farm gate, a weekly market
+/// stall, etc.). Buyers can reserve to collect directly.
+model PickupLocation {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sellerId      String   @db.Uuid
+  name          String
+  districtId    Int
+  addressLine   String
+  location      Unsupported("geometry(Point, 4326)")?
+  openingHours  Json?    // { mon: [{open: "09:00", close: "18:00"}], ... }
+  notes         String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  seller   SellerProfile @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  district District      @relation(fields: [districtId], references: [id])
+
+  @@index([sellerId])
+}
+
+/// Farm visit scheduling: sellers expose recurring time windows, buyers book.
+model FarmVisitSlot {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sellerId   String   @db.Uuid
+  dayOfWeek  Int      // 0 = Sunday
+  startTime  String   // "HH:mm" in seller local time
+  endTime    String
+  capacity   Int      @default(4)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  seller   SellerProfile      @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  bookings FarmVisitBooking[]
+
+  @@index([sellerId, dayOfWeek])
+}
+
+model FarmVisitBooking {
+  id          String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sellerId    String            @db.Uuid
+  slotId      String            @db.Uuid
+  visitorName String
+  visitorPhone String
+  partySize   Int               @default(1)
+  visitDate   DateTime          @db.Date
+  status      FarmVisitStatus   @default(PENDING)
+  notes       String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  seller SellerProfile @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  slot   FarmVisitSlot @relation(fields: [slotId], references: [id], onDelete: Cascade)
+
+  @@index([sellerId, visitDate])
+}
+
+enum FarmVisitStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+  NO_SHOW
+}
+
+// -----------------------------------------------------------------------------
+// Catalog
+// -----------------------------------------------------------------------------
+
+enum ProductStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  OUT_OF_STOCK
+  ARCHIVED
+}
+
+enum ProductionMethod {
+  CONVENTIONAL
+  GOOD_AGRICULTURE     // İyi Tarım Uygulamaları
+  ORGANIC_TRANSITION   // Organik geçiş dönemi
+  CERTIFIED_ORGANIC
+  NATURAL_TRADITIONAL  // Atasal / geleneksel, sertifikasız beyan
+  WILD_HARVESTED
+}
+
+enum UnitOfMeasure {
+  GRAM
+  KILOGRAM
+  PIECE
+  LITER
+  MILLILITER
+  BUNCH
+  DOZEN
+  BOX
+}
+
+/// Top-level catalog taxonomy — hierarchical.
+model Category {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug      String   @unique
+  nameTr    String
+  nameEn    String
+  parentId  String?  @db.Uuid
+  iconName  String?
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryTree")
+  products Product[]
+
+  @@index([parentId])
+}
+
+model Product {
+  id                String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sellerId          String           @db.Uuid
+  categoryId        String           @db.Uuid
+  slug              String           @unique
+  nameTr            String
+  nameEn            String?
+  summary           String?
+  description       String?          @db.Text
+  productionMethod  ProductionMethod
+  isSeasonal        Boolean          @default(false)
+  seasonStartMonth  Int?
+  seasonEndMonth    Int?
+  harvestNotes      String?
+  storageNotes      String?
+  allergens         String[]         @default([])
+  tags              String[]         @default([])
+  originRegion      TurkeyRegion?
+  originProvinceCode String?
+  minOrderQty       Decimal          @default(1) @db.Decimal(10, 3)
+  maxOrderQty       Decimal?         @db.Decimal(10, 3)
+  stepQty           Decimal          @default(1) @db.Decimal(10, 3)
+  status            ProductStatus    @default(DRAFT)
+  featuredAt        DateTime?
+  publishedAt       DateTime?
+  archivedAt        DateTime?
+  ratingAverage     Decimal          @default(0) @db.Decimal(3, 2)
+  ratingCount       Int              @default(0)
+  viewCount         Int              @default(0)
+  orderCount        Int              @default(0)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  seller          SellerProfile          @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  category        Category               @relation(fields: [categoryId], references: [id])
+  variants        ProductVariant[]
+  media           ProductMedia[]
+  certifications  ProductCertification[]
+  harvestBatches  HarvestBatch[]
+  reviews         Review[]
+  orderItems      OrderItem[]
+  cartItems       CartItem[]
+
+  @@index([sellerId, status])
+  @@index([categoryId, status])
+  @@index([status, publishedAt])
+  @@index([productionMethod])
+}
+
+/// A concrete SKU for a product (e.g. 500g vs 1kg jar of honey).
+model ProductVariant {
+  id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  productId      String         @db.Uuid
+  sku            String         @unique
+  nameTr         String
+  unit           UnitOfMeasure
+  quantityPerUnit Decimal       @db.Decimal(10, 3)
+  priceKurus     Int            // unit price in kuruş
+  compareAtPriceKurus Int?       // "was" price for strike-through UI
+  stockQuantity  Decimal        @db.Decimal(10, 3)
+  reservedQuantity Decimal      @default(0) @db.Decimal(10, 3)
+  lowStockThreshold Decimal?    @db.Decimal(10, 3)
+  weightGrams    Int?
+  isDefault      Boolean        @default(false)
+  isActive       Boolean        @default(true)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  product    Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  orderItems OrderItem[]
+  cartItems  CartItem[]
+
+  @@index([productId])
+}
+
+model ProductMedia {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  productId String    @db.Uuid
+  kind      MediaKind
+  url       String
+  thumbUrl  String?
+  altText   String?
+  sortOrder Int       @default(0)
+  createdAt DateTime  @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId, sortOrder])
+}
+
+// -----------------------------------------------------------------------------
+// Traceability — harvest batches
+// -----------------------------------------------------------------------------
+
+/// A harvest batch ties a concrete quantity of product to a date and field,
+/// enabling true traceability on every order.
+model HarvestBatch {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sellerId         String   @db.Uuid
+  productId        String   @db.Uuid
+  batchCode        String
+  harvestedAt      DateTime
+  quantity         Decimal  @db.Decimal(12, 3)
+  remainingQuantity Decimal @db.Decimal(12, 3)
+  unit             UnitOfMeasure
+  fieldName        String?
+  fieldLocation    Unsupported("geometry(Point, 4326)")?
+  notes            String?
+  createdAt        DateTime @default(now())
+
+  seller     SellerProfile @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  product    Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  orderItems OrderItem[]
+
+  @@unique([sellerId, batchCode])
+  @@index([productId])
+}
+
+// -----------------------------------------------------------------------------
+// Certifications
+// -----------------------------------------------------------------------------
+
+enum CertificationType {
+  ORGANIC_EU
+  ORGANIC_TR
+  GOOD_AGRICULTURE_TR     // İyi Tarım Uygulamaları
+  HALAL
+  KOSHER
+  GLOBAL_GAP
+  FAIR_TRADE
+  GEOGRAPHICAL_INDICATION // coğrafi işaret
+  TSE
+  HACCP
+  ISO_22000
+  OTHER
+}
+
+enum CertificationStatus {
+  PENDING_REVIEW
+  VERIFIED
+  REJECTED
+  EXPIRED
+  REVOKED
+}
+
+enum VerificationMethod {
+  MANUAL_ADMIN
+  REGISTRY_LOOKUP
+  QR_CODE
+  API_CHECK
+}
+
+/// A seller's certification document. Verification is a first-class lifecycle.
+/// Products can be associated with a certification via ProductCertification.
+model Certification {
+  id                 String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sellerId           String              @db.Uuid
+  type               CertificationType
+  issuer             String
+  certificateNumber  String
+  scopeDescription   String?
+  issuedAt           DateTime            @db.Date
+  expiresAt          DateTime            @db.Date
+  documentUrl        String
+  documentChecksum   String?
+  status             CertificationStatus @default(PENDING_REVIEW)
+  verificationMethod VerificationMethod?
+  verifiedAt         DateTime?
+  verifiedBy         String?             @db.Uuid
+  rejectionReason    String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  seller   SellerProfile          @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  products ProductCertification[]
+
+  @@unique([issuer, certificateNumber])
+  @@index([sellerId, status])
+  @@index([expiresAt])
+}
+
+/// Join table — a certification can cover multiple products (scope).
+model ProductCertification {
+  productId       String @db.Uuid
+  certificationId String @db.Uuid
+  createdAt       DateTime @default(now())
+
+  product       Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  certification Certification @relation(fields: [certificationId], references: [id], onDelete: Cascade)
+
+  @@id([productId, certificationId])
+  @@index([certificationId])
+}
+
+// -----------------------------------------------------------------------------
+// Cart & checkout
+// -----------------------------------------------------------------------------
+
+model Cart {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  accountId  String   @unique @db.Uuid
+  currency   String   @default("TRY")
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  account Account    @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  items   CartItem[]
+}
+
+model CartItem {
+  id         String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  cartId     String  @db.Uuid
+  productId  String  @db.Uuid
+  variantId  String  @db.Uuid
+  quantity   Decimal @db.Decimal(10, 3)
+  priceSnapshotKurus Int
+  addedAt    DateTime @default(now())
+
+  cart    Cart           @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product Product        @relation(fields: [productId], references: [id])
+  variant ProductVariant @relation(fields: [variantId], references: [id])
+
+  @@unique([cartId, variantId])
+  @@index([productId])
+}
+
+// -----------------------------------------------------------------------------
+// Orders, payments, shipments
+// -----------------------------------------------------------------------------
+
+enum OrderStatus {
+  PENDING_PAYMENT
+  PAID
+  AWAITING_FULFILLMENT
+  IN_PREPARATION
+  SHIPPED
+  OUT_FOR_DELIVERY
+  DELIVERED
+  COMPLETED
+  CANCELLED
+  REFUND_REQUESTED
+  REFUNDED
+  DISPUTED
+}
+
+enum PaymentStatus {
+  PENDING
+  AUTHORIZED
+  CAPTURED
+  HELD_IN_ESCROW
+  RELEASED
+  REFUNDED
+  PARTIALLY_REFUNDED
+  FAILED
+}
+
+enum ShipmentStatus {
+  PENDING
+  PICKED_UP
+  IN_TRANSIT
+  OUT_FOR_DELIVERY
+  DELIVERED
+  FAILED
+  RETURNED
+}
+
+/// A buyer order. An Order has exactly one buyer and one seller — multi-seller
+/// carts split into N Orders at checkout. This keeps payouts, shipping, and
+/// dispute resolution clean.
+model Order {
+  id                 String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderNumber        String         @unique
+  buyerAccountId     String         @db.Uuid
+  sellerId           String         @db.Uuid
+  status             OrderStatus    @default(PENDING_PAYMENT)
+  paymentStatus      PaymentStatus  @default(PENDING)
+  fulfillmentMode    FulfillmentMode
+  shippingAddressId  String?        @db.Uuid
+  billingAddressId   String?        @db.Uuid
+  pickupLocationId   String?        @db.Uuid
+  scheduledPickupAt  DateTime?
+  currency           String         @default("TRY")
+  subtotalKurus      Int
+  shippingKurus      Int            @default(0)
+  discountKurus      Int            @default(0)
+  taxKurus           Int            @default(0)
+  totalKurus         Int
+  platformFeeKurus   Int            @default(0) // commission we retain
+  sellerNetKurus     Int            @default(0) // what seller receives
+  buyerNotes         String?
+  sellerNotes        String?
+  cancellationReason String?
+  carrier            ShippingCarrier?
+  trackingNumber     String?
+  placedAt           DateTime       @default(now())
+  paidAt             DateTime?
+  shippedAt          DateTime?
+  deliveredAt        DateTime?
+  completedAt        DateTime?
+  cancelledAt        DateTime?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  buyer            Account         @relation(fields: [buyerAccountId], references: [id])
+  seller           SellerProfile   @relation(fields: [sellerId], references: [id])
+  shippingAddress  Address?        @relation("OrderShippingAddress", fields: [shippingAddressId], references: [id])
+  billingAddress   Address?        @relation("OrderBillingAddress", fields: [billingAddressId], references: [id])
+  items            OrderItem[]
+  events           OrderEvent[]
+  payments         Payment[]
+  shipments        Shipment[]
+  reviews          Review[]
+  conversation     Conversation?
+
+  @@index([buyerAccountId, status])
+  @@index([sellerId, status])
+  @@index([status])
+  @@index([placedAt])
+}
+
+model OrderItem {
+  id               String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderId          String  @db.Uuid
+  productId        String  @db.Uuid
+  variantId        String  @db.Uuid
+  harvestBatchId   String? @db.Uuid
+  productNameSnapshot String
+  variantNameSnapshot String
+  unit             UnitOfMeasure
+  quantity         Decimal @db.Decimal(10, 3)
+  unitPriceKurus   Int
+  totalKurus       Int
+
+  order        Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product      Product       @relation(fields: [productId], references: [id])
+  variant      ProductVariant @relation(fields: [variantId], references: [id])
+  harvestBatch HarvestBatch? @relation(fields: [harvestBatchId], references: [id])
+
+  @@index([orderId])
+}
+
+/// An append-only audit log of an order's lifecycle.
+model OrderEvent {
+  id        String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderId   String         @db.Uuid
+  type      OrderEventType
+  fromStatus OrderStatus?
+  toStatus   OrderStatus?
+  actorId   String?        @db.Uuid
+  metadata  Json?
+  createdAt DateTime       @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, createdAt])
+}
+
+enum OrderEventType {
+  CREATED
+  PAID
+  STATUS_CHANGED
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUND_REQUESTED
+  REFUND_ISSUED
+  NOTE_ADDED
+  SYSTEM_ADJUSTMENT
+}
+
+model Payment {
+  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderId         String        @db.Uuid
+  provider        PaymentProvider
+  providerRef     String?
+  amountKurus     Int
+  currency        String        @default("TRY")
+  status          PaymentStatus
+  method          PaymentMethod
+  last4           String?
+  installmentCount Int?
+  rawPayload      Json?
+  failureCode     String?
+  failureMessage  String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  refunds Refund[]
+
+  @@index([orderId])
+  @@index([providerRef])
+}
+
+enum PaymentProvider {
+  IYZICO
+  PARAM
+  PAYTR
+  MANUAL_BANK_TRANSFER
+}
+
+enum PaymentMethod {
+  CREDIT_CARD
+  DEBIT_CARD
+  BANK_TRANSFER
+  WALLET
+}
+
+model Refund {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  paymentId   String   @db.Uuid
+  amountKurus Int
+  reason      String?
+  providerRef String?
+  processedAt DateTime?
+  createdAt   DateTime @default(now())
+
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@index([paymentId])
+}
+
+model Shipment {
+  id             String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderId        String          @db.Uuid
+  carrier        ShippingCarrier
+  trackingNumber String?
+  status         ShipmentStatus  @default(PENDING)
+  shippedAt      DateTime?
+  deliveredAt    DateTime?
+  estimatedAt    DateTime?
+  rawEvents      Json?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  order  Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  events ShipmentEvent[]
+
+  @@index([orderId])
+  @@index([trackingNumber])
+}
+
+model ShipmentEvent {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  shipmentId String   @db.Uuid
+  code       String
+  description String
+  occurredAt DateTime
+  location   String?
+  createdAt  DateTime @default(now())
+
+  shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  @@index([shipmentId, occurredAt])
+}
+
+// -----------------------------------------------------------------------------
+// Payouts (platform → seller)
+// -----------------------------------------------------------------------------
+
+enum PayoutStatus {
+  SCHEDULED
+  PROCESSING
+  PAID
+  FAILED
+  CANCELLED
+}
+
+model Payout {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sellerId       String       @db.Uuid
+  periodStart    DateTime
+  periodEnd      DateTime
+  grossKurus     Int
+  platformFeeKurus Int
+  adjustmentsKurus Int        @default(0)
+  netKurus       Int
+  currency       String       @default("TRY")
+  status         PayoutStatus @default(SCHEDULED)
+  providerRef    String?
+  scheduledFor   DateTime
+  paidAt         DateTime?
+  statementUrl   String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  seller SellerProfile @relation(fields: [sellerId], references: [id])
+
+  @@index([sellerId, status])
+  @@index([scheduledFor])
+}
+
+// -----------------------------------------------------------------------------
+// Reviews
+// -----------------------------------------------------------------------------
+
+enum ReviewStatus {
+  PENDING
+  PUBLISHED
+  HIDDEN
+  REMOVED
+}
+
+model Review {
+  id           String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderId      String       @db.Uuid
+  productId    String?      @db.Uuid
+  authorId     String       @db.Uuid
+  rating       Int          // 1..5
+  title        String?
+  body         String?      @db.Text
+  status       ReviewStatus @default(PENDING)
+  sellerReply  String?      @db.Text
+  sellerReplyAt DateTime?
+  helpfulCount Int          @default(0)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  order   Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [productId], references: [id])
+  author  Account  @relation("ReviewAuthor", fields: [authorId], references: [id])
+
+  @@unique([orderId, productId, authorId])
+  @@index([productId, status])
+  @@index([authorId])
+}
+
+// -----------------------------------------------------------------------------
+// Messaging
+// -----------------------------------------------------------------------------
+
+model Conversation {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  buyerAccountId  String   @db.Uuid
+  sellerId        String   @db.Uuid
+  orderId         String?  @unique @db.Uuid
+  subject         String?
+  lastMessageAt   DateTime?
+  buyerUnreadCount Int     @default(0)
+  sellerUnreadCount Int    @default(0)
+  createdAt       DateTime @default(now())
+
+  buyer    Account       @relation("ConversationBuyer", fields: [buyerAccountId], references: [id])
+  seller   SellerProfile @relation("ConversationSeller", fields: [sellerId], references: [id])
+  order    Order?        @relation(fields: [orderId], references: [id])
+  messages Message[]
+
+  @@index([buyerAccountId])
+  @@index([sellerId])
+}
+
+model Message {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId  String   @db.Uuid
+  senderAccountId String   @db.Uuid
+  body            String   @db.Text
+  attachments     Json?
+  readAt          DateTime?
+  moderationFlag  String?
+  createdAt       DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       Account      @relation("MessageSender", fields: [senderAccountId], references: [id])
+
+  @@index([conversationId, createdAt])
+}
+
+// -----------------------------------------------------------------------------
+// Notifications & ops
+// -----------------------------------------------------------------------------
+
+enum NotificationChannel {
+  PUSH
+  SMS
+  EMAIL
+  IN_APP
+}
+
+enum NotificationKind {
+  ORDER_PLACED
+  ORDER_PAID
+  ORDER_SHIPPED
+  ORDER_DELIVERED
+  ORDER_CANCELLED
+  NEW_MESSAGE
+  CERTIFICATE_EXPIRING
+  CERTIFICATE_VERIFIED
+  PAYOUT_SENT
+  REVIEW_RECEIVED
+  SECURITY_ALERT
+  SYSTEM
+}
+
+model Notification {
+  id        String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  accountId String              @db.Uuid
+  channel   NotificationChannel
+  kind      NotificationKind
+  title     String
+  body      String
+  data      Json?
+  readAt    DateTime?
+  sentAt    DateTime?
+  createdAt DateTime            @default(now())
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, readAt])
+  @@index([accountId, createdAt])
+}
+
+enum TicketStatus {
+  OPEN
+  WAITING
+  RESOLVED
+  CLOSED
+}
+
+model SupportTicket {
+  id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  accountId   String       @db.Uuid
+  orderId     String?      @db.Uuid
+  subject     String
+  description String       @db.Text
+  status      TicketStatus @default(OPEN)
+  assigneeId  String?      @db.Uuid
+  resolvedAt  DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+  @@index([status])
+}
+
+/// Administrative audit log — append-only.
+model AuditEvent {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  accountId  String?  @db.Uuid
+  actorRole  UserRole?
+  action     String
+  entityType String
+  entityId   String?
+  before     Json?
+  after      Json?
+  ipAddress  String?  @db.Inet
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  account Account? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([accountId, createdAt])
+}
+
+// -----------------------------------------------------------------------------
+// Content & marketing
+// -----------------------------------------------------------------------------
+
+model BlogPost {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug        String   @unique
+  titleTr     String
+  titleEn     String?
+  excerpt     String?
+  body        String   @db.Text
+  coverUrl    String?
+  authorName  String?
+  publishedAt DateTime?
+  tags        String[] @default([])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([publishedAt])
+}
+
+model Banner {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug      String   @unique
+  title     String
+  imageUrl  String
+  linkUrl   String?
+  placement String
+  startsAt  DateTime?
+  endsAt    DateTime?
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+}
+
+model FeatureFlag {
+  key         String   @id
+  description String?
+  enabled     Boolean  @default(false)
+  audience    Json?
+  updatedAt   DateTime @updatedAt
+}

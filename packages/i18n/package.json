@@ -1,0 +1,23 @@
+{
+  "name": "@sanda/i18n",
+  "version": "0.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tr": "./src/locales/tr.ts",
+    "./en": "./src/locales/en.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint ."
+  },
+  "devDependencies": {
+    "@sanda/config-eslint": "workspace:*",
+    "@sanda/config-typescript": "workspace:*",
+    "typescript": "^5.6.3"
+  }
+}

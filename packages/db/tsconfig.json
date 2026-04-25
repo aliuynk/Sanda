@@ -1,0 +1,9 @@
+{
+  "extends": "@sanda/config-typescript/base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "."
+  },
+  "include": ["src/**/*", "prisma/**/*"],
+  "exclude": ["node_modules", "dist", "generated"]
+}

@@ -1,0 +1,7 @@
+{
+  "name": "@sanda/config-typescript",
+  "version": "0.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "files": ["*.json"]
+}

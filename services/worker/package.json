@@ -1,0 +1,28 @@
+{
+  "name": "@sanda/worker",
+  "version": "0.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "main": "./src/index.ts",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "node --enable-source-maps dist/index.js",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@sanda/core": "workspace:*",
+    "@sanda/db": "workspace:*",
+    "bullmq": "^5.21.2",
+    "ioredis": "^5.4.1"
+  },
+  "devDependencies": {
+    "@sanda/config-eslint": "workspace:*",
+    "@sanda/config-typescript": "workspace:*",
+    "@types/node": "^20.14.10",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.3"
+  }
+}

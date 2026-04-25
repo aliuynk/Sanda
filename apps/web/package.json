@@ -1,0 +1,51 @@
+{
+  "name": "@sanda/web",
+  "version": "0.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "scripts": {
+    "dev": "next dev -p ${WEB_PORT:-3000}",
+    "build": "next build",
+    "start": "next start -p ${WEB_PORT:-3000}",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "^5.2.2",
+    "@sanda/api": "workspace:*",
+    "@sanda/core": "workspace:*",
+    "@sanda/db": "workspace:*",
+    "@sanda/i18n": "workspace:*",
+    "@sanda/ui-web": "workspace:*",
+    "@sanda/validation": "workspace:*",
+    "@tanstack/react-query": "^5.59.16",
+    "@trpc/client": "^11.0.0-rc.502",
+    "@trpc/next": "^11.0.0-rc.502",
+    "@trpc/react-query": "^11.0.0-rc.502",
+    "@trpc/server": "^11.0.0-rc.502",
+    "jose": "^5.9.6",
+    "lucide-react": "^0.453.0",
+    "next": "^15.0.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-hook-form": "^7.73.1",
+    "superjson": "^2.2.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@sanda/config-eslint": "workspace:*",
+    "@sanda/config-tailwind": "workspace:*",
+    "@sanda/config-typescript": "workspace:*",
+    "@types/node": "^20.14.10",
+    "@types/react": "^18.3.11",
+    "@types/react-dom": "^18.3.1",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^8.57.1",
+    "eslint-config-next": "^15.0.2",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.14",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.3"
+  }
+}
