@@ -1,6 +1,7 @@
-import { ConflictError, NotFoundError, ValidationError } from '@sanda/core';
+import { NotFoundError } from '@sanda/core';
 import { addToCartInput, removeCartItemInput, updateCartItemInput } from '@sanda/validation';
 
+import { assertPurchasableCartQuantity, assertPurchasableCatalogItem } from '../domain/cart';
 import { protectedProcedure, router } from '../trpc';
 
 export const cartRouter = router({
@@ -34,9 +35,10 @@ export const cartRouter = router({
     if (!variant || variant.productId !== input.productId) {
       throw new NotFoundError('Variant');
     }
-    if (!variant.isActive) {
-      throw new ConflictError('Variant is not available.');
-    }
+    assertPurchasableCatalogItem({
+      productStatus: variant.product.status,
+      variantIsActive: variant.isActive,
+    });
 
     const cart = await ctx.prisma.cart.upsert({
       where: { accountId: ctx.principal.accountId },
@@ -49,11 +51,17 @@ export const cartRouter = router({
     });
 
     const nextQty = (existing ? Number(existing.quantity) : 0) + input.quantity;
-    if (nextQty > Number(variant.stockQuantity)) {
-      throw new ValidationError('Insufficient stock', [
-        { path: ['quantity'], message: 'errors.cart.stock' },
-      ]);
-    }
+    assertPurchasableCartQuantity({
+      productId: variant.productId,
+      variantId: variant.id,
+      sellerId: variant.product.sellerId,
+      quantity: nextQty,
+      unitPriceKurus: variant.priceKurus,
+      stockQuantity: variant.stockQuantity,
+      minOrderQty: variant.product.minOrderQty,
+      maxOrderQty: variant.product.maxOrderQty,
+      stepQty: variant.product.stepQty,
+    });
 
     return ctx.prisma.cartItem.upsert({
       where: { cartId_variantId: { cartId: cart.id, variantId: variant.id } },
@@ -72,6 +80,27 @@ export const cartRouter = router({
   }),
 
   updateItem: protectedProcedure.input(updateCartItemInput).mutation(async ({ ctx, input }) => {
+    const item = await ctx.prisma.cartItem.findFirst({
+      where: { id: input.cartItemId, cart: { accountId: ctx.principal.accountId } },
+      include: { variant: true, product: true },
+    });
+    if (!item) throw new NotFoundError('CartItem', input.cartItemId);
+    assertPurchasableCatalogItem({
+      productStatus: item.product.status,
+      variantIsActive: item.variant.isActive,
+    });
+    assertPurchasableCartQuantity({
+      productId: item.productId,
+      variantId: item.variantId,
+      sellerId: item.product.sellerId,
+      quantity: input.quantity,
+      unitPriceKurus: item.variant.priceKurus,
+      stockQuantity: item.variant.stockQuantity,
+      minOrderQty: item.product.minOrderQty,
+      maxOrderQty: item.product.maxOrderQty,
+      stepQty: item.product.stepQty,
+    });
+
     return ctx.prisma.cartItem.update({
       where: { id: input.cartItemId },
       data: { quantity: input.quantity.toString() },
@@ -79,6 +108,11 @@ export const cartRouter = router({
   }),
 
   removeItem: protectedProcedure.input(removeCartItemInput).mutation(async ({ ctx, input }) => {
-    return ctx.prisma.cartItem.delete({ where: { id: input.cartItemId } });
+    const item = await ctx.prisma.cartItem.findFirst({
+      where: { id: input.cartItemId, cart: { accountId: ctx.principal.accountId } },
+      select: { id: true },
+    });
+    if (!item) throw new NotFoundError('CartItem', input.cartItemId);
+    return ctx.prisma.cartItem.delete({ where: { id: item.id } });
   }),
 });

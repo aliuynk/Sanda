@@ -560,6 +560,8 @@ model Product {
   minOrderQty       Decimal          @default(1) @db.Decimal(10, 3)
   maxOrderQty       Decimal?         @db.Decimal(10, 3)
   stepQty           Decimal          @default(1) @db.Decimal(10, 3)
+  minPriceKurus      Int?
+  maxPriceKurus      Int?
   status            ProductStatus    @default(DRAFT)
   featuredAt        DateTime?
   publishedAt       DateTime?
@@ -584,6 +586,8 @@ model Product {
   @@index([sellerId, status])
   @@index([categoryId, status])
   @@index([status, publishedAt])
+  @@index([status, minPriceKurus])
+  @@index([status, maxPriceKurus])
   @@index([productionMethod])
 }
 

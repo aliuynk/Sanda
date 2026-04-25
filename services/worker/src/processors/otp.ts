@@ -1,7 +1,8 @@
+import crypto from 'node:crypto';
+
 import { getServerEnv, logger } from '@sanda/core';
 import { prisma } from '@sanda/db';
 import type { Job } from 'bullmq';
-import crypto from 'node:crypto';
 
 import { sendSms } from '../providers/sms';
 
@@ -16,7 +17,9 @@ export async function processOtp(job: Job<OtpJob>) {
 
   const log = logger.child({ module: 'otp', otpId });
 
-  const code = crypto.randomInt(10 ** (env.SMS_OTP_LENGTH - 1), 10 ** env.SMS_OTP_LENGTH).toString();
+  const code = crypto
+    .randomInt(10 ** (env.SMS_OTP_LENGTH - 1), 10 ** env.SMS_OTP_LENGTH)
+    .toString();
   const hash = crypto.createHash('sha256').update(code).digest('hex');
 
   await prisma.otpCode.update({

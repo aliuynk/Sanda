@@ -23,18 +23,29 @@ export const certificationRouter = router({
     if (!seller) throw new NotFoundError('SellerProfile');
     if (seller.id !== input.sellerId) throw new ForbiddenError('cert.upload');
 
-    const { appliesToProductIds, ...rest } = input;
+    const { appliesToProductIds, sellerId: _sellerId, ...rest } = input;
+    const productIds = [...new Set(appliesToProductIds)];
 
     return ctx.prisma.$transaction(async (tx) => {
+      if (productIds.length > 0) {
+        const ownedProductCount = await tx.product.count({
+          where: { id: { in: productIds }, sellerId: seller.id },
+        });
+        if (ownedProductCount !== productIds.length) {
+          throw new ForbiddenError('cert.upload.products');
+        }
+      }
+
       const cert = await tx.certification.create({
         data: {
           ...rest,
+          sellerId: seller.id,
           status: CertificationStatus.PENDING_REVIEW,
         },
       });
-      if (appliesToProductIds.length > 0) {
+      if (productIds.length > 0) {
         await tx.productCertification.createMany({
-          data: appliesToProductIds.map((productId) => ({
+          data: productIds.map((productId) => ({
             productId,
             certificationId: cert.id,
           })),
@@ -53,9 +64,7 @@ export const certificationRouter = router({
     if (!cert) throw new NotFoundError('Certification');
 
     const newStatus =
-      input.decision === 'verify'
-        ? CertificationStatus.VERIFIED
-        : CertificationStatus.REJECTED;
+      input.decision === 'verify' ? CertificationStatus.VERIFIED : CertificationStatus.REJECTED;
 
     return ctx.prisma.certification.update({
       where: { id: cert.id },

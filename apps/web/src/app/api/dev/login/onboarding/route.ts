@@ -1,12 +1,8 @@
-import { UserRole, UserStatus } from '@sanda/db/types';
 import { prisma } from '@sanda/db';
+import { UserRole, UserStatus } from '@sanda/db/types';
 import { NextResponse } from 'next/server';
 
-import {
-  ACCESS_TOKEN_TTL_SECONDS,
-  cookieNames,
-  issueSession,
-} from '@/server/auth';
+import { ACCESS_TOKEN_TTL_SECONDS, cookieNames, issueSession } from '@/server/auth';
 
 const DEMO_ONBOARDING_PHONE = '+905559990011';
 const REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60;

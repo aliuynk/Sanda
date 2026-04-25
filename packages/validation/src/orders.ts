@@ -1,4 +1,4 @@
-import { FulfillmentMode } from '@sanda/db/types';
+import { FulfillmentMode, ShippingCarrier } from '@sanda/db/types';
 import { z } from 'zod';
 
 import { uuid } from './common';
@@ -61,7 +61,7 @@ export type CheckoutInput = z.infer<typeof checkoutInput>;
 
 export const markOrderShippedInput = z.object({
   orderId: uuid,
-  carrier: z.string(),
+  carrier: z.nativeEnum(ShippingCarrier),
   trackingNumber: z.string().trim().min(3).max(60),
 });
 

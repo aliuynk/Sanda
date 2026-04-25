@@ -1,2 +1,2 @@
-export { appRouter, type AppRouter } from './root';
-export { createContext, type Context, type SessionPrincipal } from './context';
+export { type Context, createContext, type SessionPrincipal } from './context';
+export { type AppRouter, appRouter } from './root';

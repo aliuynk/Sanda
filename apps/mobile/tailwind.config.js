@@ -1,3 +1,6 @@
+/* eslint-env node */
+/* eslint-disable @typescript-eslint/no-require-imports */
+
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   presets: [require('nativewind/preset'), require('@sanda/config-tailwind')],

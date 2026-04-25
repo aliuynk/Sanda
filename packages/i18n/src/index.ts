@@ -1,4 +1,5 @@
 import { en } from './locales/en';
+import type { TrDictionary } from './locales/tr';
 import { tr } from './locales/tr';
 
 export const DEFAULT_LOCALE = 'tr' as const;
@@ -7,7 +8,7 @@ export type Locale = (typeof SUPPORTED_LOCALES)[number];
 
 export const dictionaries = { tr, en } as const;
 
-export type Dictionary = typeof tr;
+export type Dictionary = TrDictionary;
 
 /** Resolve a translation by dotted key, with optional interpolation. */
 export function translate(

@@ -229,6 +229,10 @@ async function main() {
       isDefault: true,
     },
   });
+  await prisma.product.update({
+    where: { id: product.id },
+    data: { minPriceKurus: 32000, maxPriceKurus: 32000 },
+  });
 
   await prisma.productMedia.create({
     data: {

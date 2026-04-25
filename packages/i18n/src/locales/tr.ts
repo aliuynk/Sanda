@@ -68,7 +68,8 @@ export const tr = {
     shipping: 'Kargo',
     total: 'Toplam',
     checkout: 'Ödemeye geç',
-    splitBySeller: 'Sepetiniz farklı üreticiler arasında bölünür — her üretici için ayrı sipariş oluşturulur.',
+    splitBySeller:
+      'Sepetiniz farklı üreticiler arasında bölünür — her üretici için ayrı sipariş oluşturulur.',
   },
   checkout: {
     title: 'Ödeme',
@@ -160,4 +161,10 @@ export const tr = {
   },
 } as const;
 
-export type TrDictionary = typeof tr;
+type WidenStringLeaves<T> = T extends string
+  ? string
+  : T extends object
+    ? { readonly [K in keyof T]: WidenStringLeaves<T[K]> }
+    : T;
+
+export type TrDictionary = WidenStringLeaves<typeof tr>;

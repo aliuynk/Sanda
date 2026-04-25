@@ -3,6 +3,7 @@
   "globalDependencies": [".env", ".env.local", "tsconfig.base.json"],
   "globalEnv": [
     "NODE_ENV",
+    "LOG_LEVEL",
     "CI",
     "VERCEL",
     "VERCEL_ENV",

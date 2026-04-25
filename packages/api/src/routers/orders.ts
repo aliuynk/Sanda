@@ -6,15 +6,23 @@ import {
   NotFoundError,
   PaymentError,
 } from '@sanda/core';
+import type { ShippingCarrier } from '@sanda/db/types';
 import {
   FulfillmentMode,
   OrderEventType,
   OrderStatus,
   PaymentStatus,
+  ShipmentStatus,
 } from '@sanda/db/types';
-import { cancelOrderInput, checkoutInput, createReviewInput, markOrderShippedInput } from '@sanda/validation';
+import {
+  cancelOrderInput,
+  checkoutInput,
+  createReviewInput,
+  markOrderShippedInput,
+} from '@sanda/validation';
 import { z } from 'zod';
 
+import { assertPurchasableCartQuantity, assertPurchasableCatalogItem } from '../domain/cart';
 import { protectedProcedure, router, sellerProcedure } from '../trpc';
 
 /**
@@ -77,6 +85,10 @@ export const orderRouter = router({
     }),
 
   checkout: protectedProcedure.input(checkoutInput).mutation(async ({ ctx, input }) => {
+    if (input.paymentMethod === 'CREDIT_CARD' && !input.cardToken) {
+      throw new PaymentError('Missing card token.');
+    }
+
     const env = getServerEnv();
     const cart = await ctx.prisma.cart.findUnique({
       where: { accountId: ctx.principal.accountId },
@@ -84,6 +96,53 @@ export const orderRouter = router({
     });
     if (!cart || cart.items.length === 0) {
       throw new ConflictError('Cart is empty.');
+    }
+
+    const shippingAddress = input.shippingAddressId
+      ? await ctx.prisma.address.findFirst({
+          where: {
+            id: input.shippingAddressId,
+            accountId: ctx.principal.accountId,
+            archivedAt: null,
+          },
+          select: { id: true, districtId: true, provinceCode: true },
+        })
+      : null;
+    if (input.shippingAddressId && !shippingAddress) {
+      throw new NotFoundError('Address', input.shippingAddressId);
+    }
+
+    if (input.billingAddressId) {
+      const billingAddress = await ctx.prisma.address.findFirst({
+        where: {
+          id: input.billingAddressId,
+          accountId: ctx.principal.accountId,
+          archivedAt: null,
+        },
+        select: { id: true },
+      });
+      if (!billingAddress) throw new NotFoundError('Address', input.billingAddressId);
+    }
+
+    for (const item of cart.items) {
+      assertPurchasableCatalogItem({
+        productStatus: item.product.status,
+        variantIsActive: item.variant.isActive,
+      });
+      if (item.priceSnapshotKurus !== item.variant.priceKurus) {
+        throw new ConflictError('Cart prices changed. Review cart before checkout.');
+      }
+      assertPurchasableCartQuantity({
+        productId: item.productId,
+        variantId: item.variantId,
+        sellerId: item.product.sellerId,
+        quantity: Number(item.quantity),
+        unitPriceKurus: item.variant.priceKurus,
+        stockQuantity: item.variant.stockQuantity,
+        minOrderQty: item.product.minOrderQty,
+        maxOrderQty: item.product.maxOrderQty,
+        stepQty: item.product.stepQty,
+      });
     }
 
     // Group by sellerId.
@@ -103,11 +162,47 @@ export const orderRouter = router({
           (sum, it) => sum + it.priceSnapshotKurus * Number(it.quantity),
           0,
         );
-        // Shipping quote: the real service-area resolver is called in the
-        // web/api layer before checkout; here we read the selected option.
-        // For this MVP we charge zero when pickup, else a flat rate.
-        const shippingKurus =
-          input.fulfillmentMode === FulfillmentMode.SHIPPING ? 4900 : 0;
+        let shippingKurus = 0;
+        let carrier: ShippingCarrier | null = null;
+
+        if (input.fulfillmentMode === FulfillmentMode.SHIPPING) {
+          if (!shippingAddress) throw new NotFoundError('Address', input.shippingAddressId);
+          const serviceArea = await tx.serviceArea.findFirst({
+            where: {
+              sellerId,
+              isActive: true,
+              mode: FulfillmentMode.SHIPPING,
+              OR: [
+                { provinceCodes: { has: shippingAddress.provinceCode } },
+                { districtIds: { has: shippingAddress.districtId } },
+              ],
+            },
+            orderBy: [{ shippingFee: 'asc' }, { createdAt: 'asc' }],
+          });
+          if (!serviceArea) {
+            throw new ConflictError('Seller does not ship to the selected address.', { sellerId });
+          }
+          if (subtotal < serviceArea.minOrderAmount) {
+            throw new ConflictError('Seller minimum order amount is not met.', { sellerId });
+          }
+          shippingKurus =
+            serviceArea.freeShippingOver != null && subtotal >= serviceArea.freeShippingOver
+              ? 0
+              : serviceArea.shippingFee;
+          carrier = serviceArea.carrier;
+        }
+
+        if (input.fulfillmentMode === FulfillmentMode.PICKUP) {
+          const pickupLocation = await tx.pickupLocation.findFirst({
+            where: { id: input.pickupLocationId, sellerId, isActive: true },
+            select: { id: true },
+          });
+          if (!pickupLocation) {
+            throw new ConflictError('Pickup location is not available for this seller.', {
+              sellerId,
+            });
+          }
+        }
 
         const commission = computeCommission({
           subtotalKurus: kurus(Math.round(subtotal)),
@@ -130,6 +225,7 @@ export const orderRouter = router({
             shippingAddressId: input.shippingAddressId,
             billingAddressId: input.billingAddressId ?? input.shippingAddressId,
             pickupLocationId: input.pickupLocationId,
+            carrier,
             subtotalKurus: commission.subtotalKurus,
             shippingKurus: commission.shippingKurus,
             totalKurus: commission.buyerTotalKurus,
@@ -149,10 +245,28 @@ export const orderRouter = router({
               })),
             },
             events: {
-              create: { type: OrderEventType.CREATED, toStatus: OrderStatus.PENDING_PAYMENT },
+              create: {
+                type: OrderEventType.CREATED,
+                toStatus: OrderStatus.PENDING_PAYMENT,
+                actorId: ctx.principal.accountId,
+              },
             },
           },
         });
+
+        for (const item of items) {
+          const updated = await tx.productVariant.updateMany({
+            where: {
+              id: item.variantId,
+              isActive: true,
+              stockQuantity: { gte: item.quantity },
+            },
+            data: { stockQuantity: { decrement: item.quantity } },
+          });
+          if (updated.count !== 1) {
+            throw new ConflictError('Insufficient stock.', { variantId: item.variantId });
+          }
+        }
 
         orderNumbers.push(order.orderNumber);
       }
@@ -161,17 +275,14 @@ export const orderRouter = router({
       await tx.cartItem.deleteMany({ where: { cartId: cart.id } });
     });
 
-    // Payment intent creation happens in the payments router (webhook-driven).
-    // This endpoint returns the order numbers so the client can redirect.
-    if (input.paymentMethod === 'CREDIT_CARD' && !input.cardToken) {
-      throw new PaymentError('Missing card token.');
-    }
-
     return { orderNumbers };
   }),
 
   cancel: protectedProcedure.input(cancelOrderInput).mutation(async ({ ctx, input }) => {
-    const order = await ctx.prisma.order.findUnique({ where: { id: input.orderId } });
+    const order = await ctx.prisma.order.findUnique({
+      where: { id: input.orderId },
+      include: { items: true },
+    });
     if (!order) throw new NotFoundError('Order');
     if (order.buyerAccountId !== ctx.principal.accountId) throw new NotFoundError('Order');
     if (
@@ -181,21 +292,30 @@ export const orderRouter = router({
     ) {
       throw new ConflictError('Order cannot be cancelled at this stage.');
     }
-    return ctx.prisma.order.update({
-      where: { id: order.id },
-      data: {
-        status: OrderStatus.CANCELLED,
-        cancelledAt: new Date(),
-        cancellationReason: input.reason,
-        events: {
-          create: {
-            type: OrderEventType.CANCELLED,
-            fromStatus: order.status,
-            toStatus: OrderStatus.CANCELLED,
-            actorId: ctx.principal.accountId,
+    return ctx.prisma.$transaction(async (tx) => {
+      for (const item of order.items) {
+        await tx.productVariant.update({
+          where: { id: item.variantId },
+          data: { stockQuantity: { increment: item.quantity } },
+        });
+      }
+
+      return tx.order.update({
+        where: { id: order.id },
+        data: {
+          status: OrderStatus.CANCELLED,
+          cancelledAt: new Date(),
+          cancellationReason: input.reason,
+          events: {
+            create: {
+              type: OrderEventType.CANCELLED,
+              fromStatus: order.status,
+              toStatus: OrderStatus.CANCELLED,
+              actorId: ctx.principal.accountId,
+            },
           },
         },
-      },
+      });
     });
   }),
 
@@ -232,16 +352,39 @@ export const orderRouter = router({
     }),
 
   markShipped: sellerProcedure.input(markOrderShippedInput).mutation(async ({ ctx, input }) => {
+    const seller = await ctx.prisma.sellerProfile.findUnique({
+      where: { accountId: ctx.principal.accountId },
+      select: { id: true },
+    });
+    if (!seller) throw new NotFoundError('SellerProfile');
+
     return ctx.prisma.$transaction(async (tx) => {
+      const existing = await tx.order.findUnique({ where: { id: input.orderId } });
+      if (!existing || existing.sellerId !== seller.id) {
+        throw new NotFoundError('Order');
+      }
+      if (existing.fulfillmentMode !== FulfillmentMode.SHIPPING) {
+        throw new ConflictError('Only shipping orders can be marked as shipped.');
+      }
+      if (
+        existing.status !== OrderStatus.PAID &&
+        existing.status !== OrderStatus.AWAITING_FULFILLMENT &&
+        existing.status !== OrderStatus.IN_PREPARATION
+      ) {
+        throw new ConflictError('Order cannot be marked as shipped at this stage.');
+      }
+
       const order = await tx.order.update({
         where: { id: input.orderId },
         data: {
           status: OrderStatus.SHIPPED,
           shippedAt: new Date(),
+          carrier: input.carrier,
           trackingNumber: input.trackingNumber,
           events: {
             create: {
               type: OrderEventType.SHIPPED,
+              fromStatus: existing.status,
               toStatus: OrderStatus.SHIPPED,
               actorId: ctx.principal.accountId,
             },
@@ -251,10 +394,10 @@ export const orderRouter = router({
       await tx.shipment.create({
         data: {
           orderId: order.id,
-          carrier: order.carrier ?? 'CUSTOM',
+          carrier: input.carrier,
           trackingNumber: input.trackingNumber,
           shippedAt: new Date(),
-          status: 'IN_TRANSIT',
+          status: ShipmentStatus.IN_TRANSIT,
         },
       });
       return order;
@@ -264,13 +407,16 @@ export const orderRouter = router({
   createReview: protectedProcedure.input(createReviewInput).mutation(async ({ ctx, input }) => {
     const order = await ctx.prisma.order.findUnique({
       where: { id: input.orderId },
-      select: { buyerAccountId: true, status: true },
+      select: { buyerAccountId: true, status: true, items: { select: { productId: true } } },
     });
     if (!order || order.buyerAccountId !== ctx.principal.accountId) {
       throw new NotFoundError('Order');
     }
     if (order.status !== OrderStatus.DELIVERED && order.status !== OrderStatus.COMPLETED) {
       throw new ConflictError('You can only review delivered orders.');
+    }
+    if (input.productId && !order.items.some((item) => item.productId === input.productId)) {
+      throw new NotFoundError('Product', input.productId);
     }
     return ctx.prisma.review.create({
       data: {

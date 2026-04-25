@@ -46,20 +46,19 @@ export function ProductCard({
     <a
       href={href}
       className={cn(
-        'group flex flex-col overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm ring-1 ring-black/[0.03] transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-lg hover:shadow-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        'border-border/70 bg-card hover:border-primary/25 hover:shadow-primary/5 focus-visible:ring-ring group flex flex-col overflow-hidden rounded-2xl border shadow-sm ring-1 ring-black/[0.03] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2',
         className,
       )}
     >
-      <div className="relative aspect-[4/3] w-full overflow-hidden bg-muted">
+      <div className="bg-muted relative aspect-[4/3] w-full overflow-hidden">
         {data.imageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={data.imageUrl}
             alt={data.nameTr}
             className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center text-muted-foreground">
+          <div className="text-muted-foreground flex h-full w-full items-center justify-center">
             <Leaf className="h-10 w-10" />
           </div>
         )}
@@ -81,11 +80,11 @@ export function ProductCard({
           <h3 className="line-clamp-2 font-medium leading-snug">{data.nameTr}</h3>
           <div className="shrink-0 text-right text-sm font-semibold">{data.priceLabel}</div>
         </div>
-        <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <div className="text-muted-foreground flex items-center justify-between text-xs">
           <span className="truncate">{data.sellerName}</span>
           <span>{data.unitLabel}</span>
         </div>
-        <div className="mt-auto flex flex-wrap items-center gap-2 pt-2 text-xs text-muted-foreground">
+        <div className="text-muted-foreground mt-auto flex flex-wrap items-center gap-2 pt-2 text-xs">
           <Badge tone="outline">{methodLabel[data.productionMethod]}</Badge>
           {data.originLabel ? (
             <span className="inline-flex items-center gap-1">
