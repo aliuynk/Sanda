@@ -1,6 +1,7 @@
 'use client';
 
-import { Button } from '@sanda/ui-web';
+import { Button, useToast } from '@sanda/ui-web';
+import { ShoppingBasket } from 'lucide-react';
 import { useState } from 'react';
 
 import { trpc } from '@/trpc/shared';
@@ -17,14 +18,14 @@ export function AddToCartButton({
   stepQty: number;
 }) {
   const [qty, setQty] = useState(minOrderQty);
-  const [message, setMessage] = useState<string | null>(null);
+  const toast = useToast();
   const utils = trpc.useUtils();
   const addItem = trpc.cart.addItem.useMutation({
     onSuccess: () => {
-      setMessage('Sepete eklendi.');
+      toast.success('Sepete eklendi');
       void utils.cart.get.invalidate();
     },
-    onError: (err) => setMessage(err.message),
+    onError: (err) => toast.error('Sepete eklenemedi', err.message),
   });
 
   return (
@@ -55,14 +56,11 @@ export function AddToCartButton({
       <Button
         loading={addItem.isPending}
         onClick={() => addItem.mutate({ productId, variantId, quantity: qty })}
+        className="gap-2"
       >
+        <ShoppingBasket className="h-4 w-4" />
         Sepete ekle
       </Button>
-      {message ? (
-        <p className="text-xs text-muted-foreground" role="status">
-          {message}
-        </p>
-      ) : null}
     </div>
   );
 }

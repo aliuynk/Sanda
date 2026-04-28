@@ -1,6 +1,8 @@
 import { formatDate } from '@sanda/core';
-import { Badge, Card, CardContent, EmptyState } from '@sanda/ui-web';
-import { FileCheck2 } from 'lucide-react';
+import { Badge, buttonVariants, Card, CardContent, cn, EmptyState } from '@sanda/ui-web';
+import { FileCheck2, Plus } from 'lucide-react';
+import type { Route } from 'next';
+import Link from 'next/link';
 
 import { getServerTrpc } from '@/trpc/server';
 
@@ -18,12 +20,21 @@ export default async function CertificationsPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="font-display text-3xl font-semibold tracking-tight md:text-4xl">Sertifikalarım</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Organik, İyi Tarım, coğrafi işaret ve diğer belgeler — doğrulama durumu vitrindeki rozetlerle
-          birebir eşlenir.
-        </p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="font-display text-3xl font-semibold tracking-tight md:text-4xl">Sertifikalarım</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Organik, İyi Tarım, coğrafi işaret ve diğer belgeler — doğrulama durumu vitrindeki rozetlerle
+            birebir eşlenir.
+          </p>
+        </div>
+        <Link
+          href={'/satici/sertifikalar/yeni' as Route}
+          className={cn(buttonVariants({ size: 'lg' }), 'w-fit gap-2 rounded-xl')}
+        >
+          <Plus className="h-4 w-4" />
+          Sertifika yükle
+        </Link>
       </div>
 
       {certs.length === 0 ? (
@@ -32,6 +43,14 @@ export default async function CertificationsPage() {
           icon={<FileCheck2 className="h-10 w-10 text-primary" />}
           title="Henüz sertifika yok"
           description="Belgelerini yüklediğinde burada durumlarını takip edebilirsin. Onaylı rozetler ürün kartlarında görünür."
+          action={
+            <Link
+              href={'/satici/sertifikalar/yeni' as Route}
+              className={cn(buttonVariants(), 'rounded-xl')}
+            >
+              Sertifika yükle
+            </Link>
+          }
         />
       ) : (
         <div className="grid gap-4">

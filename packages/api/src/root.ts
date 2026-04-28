@@ -3,6 +3,7 @@ import { cartRouter } from './routers/cart';
 import { catalogRouter } from './routers/catalog';
 import { certificationRouter } from './routers/certifications';
 import { geoRouter } from './routers/geo';
+import { messagingRouter } from './routers/messaging';
 import { orderRouter } from './routers/orders';
 import { sellerRouter } from './routers/sellers';
 import { router } from './trpc';
@@ -15,6 +16,7 @@ export const appRouter = router({
   cart: cartRouter,
   orders: orderRouter,
   geo: geoRouter,
+  messaging: messagingRouter,
 });
 
 export type AppRouter = typeof appRouter;

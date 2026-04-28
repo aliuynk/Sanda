@@ -1,5 +1,6 @@
 'use client';
 
+import { Toaster, ToastProvider } from '@sanda/ui-web';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { httpBatchLink } from '@trpc/client';
 import { useState } from 'react';
@@ -43,7 +44,12 @@ export function TrpcProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <trpc.Provider client={trpcClient} queryClient={queryClient}>
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      <QueryClientProvider client={queryClient}>
+        <ToastProvider>
+          {children}
+          <Toaster />
+        </ToastProvider>
+      </QueryClientProvider>
     </trpc.Provider>
   );
 }

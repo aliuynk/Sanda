@@ -1,63 +1,80 @@
 import { formatTry, kurus } from '@sanda/core';
-import { Card, CardContent, CardHeader, CardTitle } from '@sanda/ui-web';
-import { TrendingUp, Wallet } from 'lucide-react';
+import type { Metadata } from 'next';
 
 import { getServerTrpc } from '@/trpc/server';
+
+import { EarningsView } from './earnings-view';
+
+export const metadata: Metadata = {
+  title: 'Kazanç',
+  description: 'Satıcı kazanç özeti, aylık grafik ve hakediş geçmişi.',
+};
+
+const monthNames = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
 
 export default async function SellerEarningsPage() {
   const trpc = await getServerTrpc();
   const { items } = await trpc.orders.listForSeller({ limit: 100 });
 
   const completed = items.filter((o) => o.status === 'COMPLETED' || o.status === 'DELIVERED');
-  const gross = completed.reduce((s, o) => s + o.sellerNetKurus, 0);
   const pending = items.filter((o) =>
     ['PAID', 'AWAITING_FULFILLMENT', 'IN_PREPARATION', 'SHIPPED', 'OUT_FOR_DELIVERY'].includes(o.status),
   );
+
+  const totalGross = completed.reduce((s, o) => s + o.totalKurus, 0);
+  const totalNet = completed.reduce((s, o) => s + o.sellerNetKurus, 0);
+  const totalCommission = completed.reduce((s, o) => s + o.platformFeeKurus, 0);
   const pendingAmount = pending.reduce((s, o) => s + o.sellerNetKurus, 0);
 
+  // Build monthly aggregation from order dates
+  const monthlyMap = new Map<string, { net: number; gross: number }>();
+  for (const order of [...completed, ...pending]) {
+    const d = new Date(order.placedAt);
+    const key = `${d.getFullYear()}-${String(d.getMonth()).padStart(2, '0')}`;
+    const label = monthNames[d.getMonth()] ?? key;
+    const existing = monthlyMap.get(key) ?? { net: 0, gross: 0 };
+    existing.gross += order.totalKurus;
+    existing.net += order.sellerNetKurus;
+    monthlyMap.set(key, existing);
+  }
+
+  // Sort by date key and take last 6 months
+  const monthlyData = Array.from(monthlyMap.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .slice(-6)
+    .map(([key, data]) => {
+      const monthIdx = parseInt(key.split('-')[1]!, 10);
+      return {
+        month: monthNames[monthIdx] ?? key,
+        net: data.net,
+        gross: data.gross,
+      };
+    });
+
+  // Placeholder payouts (will be replaced by real payout worker data)
+  const recentPayouts = completed.length > 0
+    ? [
+        {
+          id: 'p-1',
+          date: new Date().toLocaleDateString('tr-TR', { dateStyle: 'medium' }),
+          amount: totalNet,
+          status: 'completed' as const,
+        },
+      ]
+    : [];
+
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="font-display text-3xl font-semibold tracking-tight md:text-4xl">Kazanç</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Net satıcı payı (komisyon sonrası) özetidir. Gerçek ödeme takvimi ve mutabakat raporları
-          payout worker ile üretilecek.
-        </p>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card className="border-border/70 bg-gradient-to-br from-primary/[0.08] to-card">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Tamamlanan siparişler</CardTitle>
-            <Wallet className="h-4 w-4 text-primary" aria-hidden />
-          </CardHeader>
-          <CardContent>
-            <p className="font-display text-3xl font-semibold tabular-nums">{formatTry(kurus(gross))}</p>
-            <p className="mt-1 text-xs text-muted-foreground">{completed.length} sipariş</p>
-          </CardContent>
-        </Card>
-        <Card className="border-border/70">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Bekleyen tahsilat</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" aria-hidden />
-          </CardHeader>
-          <CardContent>
-            <p className="font-display text-3xl font-semibold tabular-nums">{formatTry(kurus(pendingAmount))}</p>
-            <p className="mt-1 text-xs text-muted-foreground">{pending.length} açık sipariş</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card className="border-dashed border-primary/20 bg-primary/[0.02]">
-        <CardContent className="p-6 text-sm text-muted-foreground">
-          <p className="font-medium text-foreground">Yol haritası</p>
-          <ul className="mt-3 list-inside list-disc space-y-2">
-            <li>Günlük / haftalık mutabakat PDF ve iyzico payout eşlemesi.</li>
-            <li>KDV ve müstahsil makbuzu hatırlatmaları (üretici tipine göre).</li>
-            <li>İade ve ihtilaf kesintilerinin otomatik düşümü.</li>
-          </ul>
-        </CardContent>
-      </Card>
-    </div>
+    <EarningsView
+      data={{
+        totalNet,
+        totalGross,
+        totalCommission,
+        pendingAmount,
+        completedCount: completed.length,
+        pendingCount: pending.length,
+        monthlyData,
+        recentPayouts,
+      }}
+    />
   );
 }

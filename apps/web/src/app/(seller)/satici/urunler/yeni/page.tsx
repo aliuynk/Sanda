@@ -1,24 +1,12 @@
-import { redirect } from 'next/navigation';
+import type { Metadata } from 'next';
 
-import { getServerTrpc } from '@/trpc/server';
+import { ProductForm } from './product-form';
 
-import { NewProductForm } from './new-product-form';
+export const metadata: Metadata = {
+  title: 'Yeni ürün',
+  description: 'Yeni ürün oluştur — taslak olarak kaydet veya doğrudan yayına al.',
+};
 
-export const metadata = { title: 'Yeni ürün' };
-
-export default async function NewProductPage() {
-  const trpc = await getServerTrpc();
-  const [me, categories] = await Promise.all([trpc.auth.me(), trpc.catalog.categories()]);
-  const seller = me.sellerProfile;
-  if (!seller) redirect('/sat');
-
-  const flatCategories: { id: string; label: string }[] = [];
-  for (const c of categories) {
-    flatCategories.push({ id: c.id, label: c.nameTr });
-    for (const child of c.children) {
-      flatCategories.push({ id: child.id, label: `${c.nameTr} › ${child.nameTr}` });
-    }
-  }
-
-  return <NewProductForm sellerId={seller.id} categories={flatCategories} />;
+export default function NewProductPage() {
+  return <ProductForm mode="create" />;
 }

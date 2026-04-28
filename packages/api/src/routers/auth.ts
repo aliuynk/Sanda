@@ -88,6 +88,13 @@ export const authRouter = router({
     return account;
   }),
 
+  myAddresses: protectedProcedure.query(async ({ ctx }) => {
+    return ctx.prisma.address.findMany({
+      where: { accountId: ctx.principal.accountId, archivedAt: null },
+      orderBy: [{ isDefault: 'desc' }, { createdAt: 'desc' }],
+    });
+  }),
+
   logout: protectedProcedure.input(z.object({})).mutation(async ({ ctx }) => {
     await ctx.prisma.session.update({
       where: { id: ctx.principal.sessionId },

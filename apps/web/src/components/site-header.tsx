@@ -18,7 +18,7 @@ export function SiteHeader() {
 
         <MainNav />
 
-        <form action="/kesfet" className="mx-auto hidden max-w-md flex-1 lg:block">
+        <form action="/ara" className="mx-auto hidden max-w-md flex-1 lg:block">
           <label className="sr-only" htmlFor="global-search">
             Ürün ara
           </label>

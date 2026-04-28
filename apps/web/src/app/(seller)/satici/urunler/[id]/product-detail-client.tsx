@@ -10,6 +10,7 @@ import {
   Card,
   CardContent,
   cn,
+  useToast,
 } from '@sanda/ui-web';
 import { CheckCircle2, ExternalLink, Package, Plus } from 'lucide-react';
 import type { Route } from 'next';
@@ -60,11 +61,16 @@ export function ProductDetailClient({ product }: { product: SellerProduct }) {
   const [addingVariant, setAddingVariant] = useState(product.variants.length === 0);
   const router = useRouter();
   const utils = trpc.useUtils();
+  const toast = useToast();
 
   const publish = trpc.catalog.publish.useMutation({
     onSuccess: async () => {
       await utils.catalog.listMine.invalidate();
+      toast.success('Ürün yayına alındı', 'Vitrinde görüntülenmeye başlayacak.');
       router.refresh();
+    },
+    onError: (err) => {
+      toast.error('Yayına alınamadı', err.message);
     },
   });
 

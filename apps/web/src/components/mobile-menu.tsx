@@ -11,6 +11,7 @@ const links = [
   { href: '/kesfet', label: 'Keşfet' },
   { href: '/ureticiler', label: 'Üreticiler' },
   { href: '/hikayeler', label: 'Hikâyeler' },
+  { href: '/mesajlarim', label: 'Mesajlarım' },
   { href: '/hakkimizda', label: 'Hakkımızda' },
 ];
 
@@ -74,7 +75,7 @@ export function MobileMenu() {
                 <X className="h-5 w-5" />
               </Button>
             </div>
-            <form action="/kesfet" className="border-b p-4">
+            <form action="/ara" className="border-b p-4">
               <label className="sr-only" htmlFor="mobile-search">
                 Ürün ara
               </label>

@@ -7,9 +7,12 @@ import {
   ClipboardList,
   FileCheck2,
   Home,
+  LineChart,
   Menu,
+  MessageCircle,
   Settings,
   ShoppingBag,
+  Sprout,
   Truck,
   X,
 } from 'lucide-react';
@@ -26,6 +29,9 @@ const sellerNav = [
   { href: '/satici/hizmet-alanlari', label: 'Hizmet alanları', icon: Truck },
   { href: '/satici/sertifikalar', label: 'Sertifikalar', icon: FileCheck2 },
   { href: '/satici/kazanc', label: 'Kazanç', icon: BarChart3 },
+  { href: '/satici/analitik', label: 'Analitik', icon: LineChart },
+  { href: '/satici/ziyaretler', label: 'Çiftlik ziyareti', icon: Sprout },
+  { href: '/satici/mesajlar', label: 'Mesajlar', icon: MessageCircle },
   { href: '/satici/ayarlar', label: 'Ayarlar', icon: Settings },
 ];
 

@@ -1,5 +1,5 @@
 import { ConflictError, ForbiddenError, NotFoundError } from '@sanda/core';
-import { ProductStatus, SellerStatus } from '@sanda/db/types';
+import { ProductionMethod, ProductStatus, SellerStatus } from '@sanda/db/types';
 import {
   createProductInput,
   createVariantInput,
@@ -77,6 +77,69 @@ function activeSeasonFilter(month: number) {
 
 export const catalogRouter = router({
   // --- Public discovery ------------------------------------------------------
+
+  /** Dedicated search endpoint — used by /ara page. Falls back to Prisma ilike. */
+  search: guardedProcedure
+    .input(
+      z.object({
+        query: z.string().min(1).max(200),
+        sort: z.enum(['relevance', 'price_asc', 'price_desc', 'newest']).default('relevance'),
+        productionMethod: z.string().optional(),
+        limit: z.number().int().min(1).max(50).default(24),
+        cursor: z.string().optional(),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const where = {
+        status: ProductStatus.ACTIVE,
+        archivedAt: null,
+        seller: { status: SellerStatus.APPROVED },
+        variants: { some: { isActive: true } },
+        ...(input.productionMethod
+          ? { productionMethod: input.productionMethod as ProductionMethod }
+          : {}),
+        OR: [
+          { nameTr: { contains: input.query, mode: 'insensitive' as const } },
+          { nameEn: { contains: input.query, mode: 'insensitive' as const } },
+          { tags: { hasSome: [input.query.toLowerCase()] } },
+          { summary: { contains: input.query, mode: 'insensitive' as const } },
+        ],
+      };
+
+      const orderBy =
+        input.sort === 'price_asc'
+          ? [{ minPriceKurus: 'asc' as const }]
+          : input.sort === 'price_desc'
+            ? [{ maxPriceKurus: 'desc' as const }]
+            : input.sort === 'newest'
+              ? [{ publishedAt: 'desc' as const }]
+              : [{ ratingAverage: 'desc' as const }, { orderCount: 'desc' as const }];
+
+      const [rows, totalCount] = await Promise.all([
+        ctx.prisma.product.findMany({
+          where,
+          orderBy,
+          take: input.limit + 1,
+          ...(input.cursor ? { cursor: { id: input.cursor }, skip: 1 } : {}),
+          include: {
+            variants: { where: { isActive: true }, orderBy: { priceKurus: 'asc' }, take: 1 },
+            media: { take: 1, orderBy: { sortOrder: 'asc' } },
+            seller: { select: { id: true, slug: true, displayName: true } },
+            category: { select: { slug: true, nameTr: true } },
+          },
+        }),
+        ctx.prisma.product.count({ where }),
+      ]);
+
+      const hasMore = rows.length > input.limit;
+      const items = hasMore ? rows.slice(0, -1) : rows;
+      return {
+        items,
+        totalCount,
+        nextCursor: hasMore ? items[items.length - 1]!.id : null,
+      };
+    }),
+
   list: guardedProcedure.input(listProductsInput).query(async ({ ctx, input }) => {
     const variantPriceFilter: { gte?: number; lte?: number } = {};
     if (input.priceMinKurus != null) variantPriceFilter.gte = input.priceMinKurus;
