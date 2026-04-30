@@ -247,7 +247,7 @@ export function SettingsForms() {
                 <div>
                   <label className="mb-1.5 block text-sm font-medium">Banka</label>
                   <Input placeholder="Banka adı" readOnly className="bg-muted/30" />
-                  <p className="mt-1 text-xs text-muted-foreground">IBAN'dan otomatik çözümlenir</p>
+                  <p className="mt-1 text-xs text-muted-foreground">IBAN&apos;dan otomatik çözümlenir</p>
                 </div>
               </div>
 

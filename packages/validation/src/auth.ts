@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { email, nonEmptyTrimmed, turkishPhoneE164 } from './common';
+import { email, nonEmptyTrimmed, turkishPhoneE164, uuid } from './common';
 
 export const requestOtpInput = z.object({
   phone: turkishPhoneE164,
@@ -33,3 +33,53 @@ export const registerBuyerInput = z.object({
 export type RegisterBuyerInput = z.infer<typeof registerBuyerInput>;
 
 export const sessionIdInput = z.object({ sessionId: z.string().uuid() });
+
+// ---------------------------------------------------------------------------
+// Profile
+// ---------------------------------------------------------------------------
+
+export const updateProfileInput = z.object({
+  firstName: z.string().trim().min(1).max(80).optional(),
+  lastName: z.string().trim().min(1).max(80).optional(),
+  displayName: z.string().trim().min(1).max(120).optional().nullable(),
+  email: email.optional(),
+  marketingOptIn: z.boolean().optional(),
+});
+export type UpdateProfileInput = z.infer<typeof updateProfileInput>;
+
+// ---------------------------------------------------------------------------
+// Addresses
+// ---------------------------------------------------------------------------
+
+const addressShape = {
+  label: z.string().trim().max(40).optional().nullable(),
+  recipient: nonEmptyTrimmed('recipient', 120),
+  phone: turkishPhoneE164,
+  line1: nonEmptyTrimmed('address_line', 240),
+  line2: z.string().trim().max(240).optional().nullable(),
+  districtId: z.number().int().positive(),
+  provinceCode: z
+    .string()
+    .regex(/^\d{2}$/u, { message: 'errors.province.code' }),
+  postalCode: z
+    .string()
+    .trim()
+    .regex(/^\d{5}$/u, { message: 'errors.postal_code' })
+    .optional()
+    .nullable(),
+  notes: z.string().trim().max(400).optional().nullable(),
+  isDefault: z.boolean().default(false),
+};
+
+export const addressInput = z.object(addressShape);
+export type AddressInput = z.infer<typeof addressInput>;
+
+const addressPatchShape = {
+  ...addressShape,
+  isDefault: z.boolean().optional(),
+};
+export const updateAddressInput = z.object({
+  id: uuid,
+  patch: z.object(addressPatchShape).partial(),
+});
+export type UpdateAddressInput = z.infer<typeof updateAddressInput>;

@@ -16,7 +16,7 @@ export default function KvkkPage() {
       <div className="prose prose-neutral mt-10 max-w-none dark:prose-invert prose-headings:font-display prose-headings:tracking-tight prose-a:text-primary">
         <h2>1. Veri sorumlusu</h2>
         <p>
-          6698 sayılı Kişisel Verilerin Korunması Kanunu ("KVKK") uyarınca, kişisel verileriniz;
+          6698 sayılı Kişisel Verilerin Korunması Kanunu (&ldquo;KVKK&rdquo;) uyarınca, kişisel verileriniz;
           veri sorumlusu olarak Sanda tarafından aşağıda açıklanan kapsamda işlenecektir.
         </p>
 
@@ -41,18 +41,18 @@ export default function KvkkPage() {
         <p>
           Kişisel veriler; ödeme kuruluşları (iyzico), kargo firmaları, yasal merciler ve
           platform hizmet sağlayıcılarına aktarılabilir. Yurt dışına veri aktarımı yapılması
-          halinde KVKK'nın 9. maddesi kapsamında gerekli önlemler alınır.
+          halinde KVKK&apos;nın 9. maddesi kapsamında gerekli önlemler alınır.
         </p>
 
         <h2>5. Haklar</h2>
-        <p>KVKK'nın 11. maddesi kapsamında aşağıdaki haklara sahipsiniz:</p>
+        <p>KVKK&apos;nın 11. maddesi kapsamında aşağıdaki haklara sahipsiniz:</p>
         <ul>
           <li>Kişisel verilerinizin işlenip işlenmediğini öğrenme</li>
           <li>İşlenmişse buna ilişkin bilgi talep etme</li>
           <li>İşlenme amacını ve amaca uygun kullanılıp kullanılmadığını öğrenme</li>
           <li>Yurt içinde veya yurt dışında aktarıldığı üçüncü kişileri bilme</li>
           <li>Eksik veya yanlış işlenmiş olması halinde düzeltilmesini isteme</li>
-          <li>KVKK'nın 7. maddesi kapsamında silinmesini veya yok edilmesini isteme</li>
+          <li>KVKK&apos;nın 7. maddesi kapsamında silinmesini veya yok edilmesini isteme</li>
           <li>İşlenen verilerin münhasıran otomatik sistemler aracılığıyla analiz edilmesi
             suretiyle aleyhine bir sonuç ortaya çıkmasına itiraz etme</li>
         </ul>

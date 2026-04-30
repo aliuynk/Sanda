@@ -144,7 +144,7 @@ export function SearchClient() {
       {initialQuery && (
         <div className="mb-6 flex items-center justify-between">
           <p className="text-sm text-muted-foreground">
-            <span className="font-semibold text-foreground">"{initialQuery}"</span> için
+            <span className="font-semibold text-foreground">&ldquo;{initialQuery}&rdquo;</span> için
             {isLoading ? (
               <span className="ml-1">aranıyor...</span>
             ) : (
@@ -212,7 +212,7 @@ export function SearchClient() {
           </div>
           <h2 className="font-display text-xl font-semibold">Sonuç bulunamadı</h2>
           <p className="max-w-sm text-sm text-muted-foreground">
-            "{initialQuery}" ile eşleşen ürün yok. Farklı anahtar kelime dene veya filtreleri kaldır.
+            &ldquo;{initialQuery}&rdquo; ile eşleşen ürün yok. Farklı anahtar kelime dene veya filtreleri kaldır.
           </p>
           <Link
             href={'/kesfet' as Route}

@@ -20,6 +20,7 @@
     "@trpc/client": "^11.0.0-rc.502",
     "@trpc/react-query": "^11.0.0-rc.502",
     "@trpc/server": "^11.0.0-rc.502",
+    "jose": "^5.9.6",
     "lucide-react": "^0.453.0",
     "next": "^15.0.2",
     "react": "^18.3.1",

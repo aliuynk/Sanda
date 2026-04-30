@@ -144,7 +144,7 @@ export function FarmVisitView() {
             <div>
               <h2 className="font-display text-lg font-semibold">Ziyaretleri etkinleştir</h2>
               <p className="text-sm text-muted-foreground">
-                Aktifleştiğinde profilinde "Çiftlik ziyareti" seçeneği görünür.
+                Aktifleştiğinde profilinde &ldquo;Çiftlik ziyareti&rdquo; seçeneği görünür.
               </p>
             </div>
           </div>

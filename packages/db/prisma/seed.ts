@@ -141,6 +141,62 @@ async function main() {
     },
   });
 
+  // --- Demo admin operator ---------------------------------------------------
+  await prisma.account.upsert({
+    where: { phone: '+905550000001' },
+    update: { status: UserStatus.ACTIVE, roles: { set: [UserRole.ADMIN, UserRole.BUYER] } },
+    create: {
+      phone: '+905550000001',
+      phoneVerifiedAt: new Date(),
+      status: UserStatus.ACTIVE,
+      roles: [UserRole.ADMIN, UserRole.BUYER],
+      termsAcceptedAt: new Date(),
+      termsVersion: '1.0',
+      profile: {
+        create: { firstName: 'Sanda', lastName: 'Operatör', displayName: 'Sanda Ops' },
+      },
+    },
+  });
+
+  // --- Demo pending applicant (so the queue is not empty) -------------------
+  const pendingAccount = await prisma.account.upsert({
+    where: { phone: '+905552223344' },
+    update: {},
+    create: {
+      phone: '+905552223344',
+      phoneVerifiedAt: new Date(),
+      status: UserStatus.ACTIVE,
+      roles: [UserRole.SELLER, UserRole.BUYER],
+      termsAcceptedAt: new Date(),
+      termsVersion: '1.0',
+      profile: {
+        create: { firstName: 'Fatma', lastName: 'Demir', displayName: 'Fatma D.' },
+      },
+    },
+  });
+  await prisma.sellerProfile.upsert({
+    where: { accountId: pendingAccount.id },
+    update: {},
+    create: {
+      accountId: pendingAccount.id,
+      slug: 'urla-zeytin-kooperatifi',
+      displayName: 'Urla Zeytin Kooperatifi',
+      tagline: 'Geleneksel taş baskı zeytinyağı',
+      story:
+        'Urla yarımadasında 17 üyemizle organik geçiş döneminde zeytin yetiştiriyoruz. Yağı kendi atölyemizde taş baskı ile çıkarıyoruz.',
+      kind: SellerKind.COOPERATIVE,
+      status: SellerStatus.PENDING_REVIEW,
+      farmName: 'Kooperatif Atölyesi',
+      farmDistrictId: 351,
+      contactEmail: 'fatma@urla-koop.test',
+      contactPhone: '+905552223344',
+      foundedYear: 2018,
+      iban: 'TR000006100000000000000000',
+      ibanHolder: 'Urla Zeytin Kooperatifi',
+      mersisNumber: '0000-0000-0000-0001',
+    },
+  });
+
   // --- Service area (Turkey-wide cargo + local pickup) -----------------------
   await prisma.serviceArea.create({
     data: {

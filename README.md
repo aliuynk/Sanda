@@ -61,8 +61,12 @@ infra/        Docker Compose: Postgres+PostGIS, Redis, Meilisearch,
 - **Multi-seller carts split at checkout.** Each seller gets their own
   `Order`, their own shipping, their own payout, their own dispute. Buyer
   sees this clearly in the UI.
-- **Escrow payments.** Buyer pays the platform, the platform holds funds
-  via iyzico submerchant, seller is released after delivery is confirmed.
+- **PSP-tracked payouts, not escrow.** Sanda is not a money-holding party.
+  iyzico (a BDDK-licensed e-money institution) collects payment and tracks a
+  per-seller submerchant balance; we mark the balance releasable after
+  delivery confirmation and the refund window. The seller is the seller of
+  record; tax obligations stay with the seller and the platform automates
+  e-fatura / e-arşiv / payment reporting.
 
 ---
 

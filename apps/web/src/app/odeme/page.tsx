@@ -4,7 +4,8 @@ import { CheckoutView } from './checkout-view';
 
 export const metadata: Metadata = {
   title: 'Ödeme',
-  description: 'Sipariş ödeme — güvenli iyzico altyapısı ile emanet ödeme.',
+  description:
+    'Sipariş ödeme — lisanslı ödeme kuruluşu iyzico üzerinden 3D Secure ve hakediş takibiyle.',
 };
 
 export default function CheckoutPage() {

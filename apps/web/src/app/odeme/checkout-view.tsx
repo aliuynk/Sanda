@@ -460,9 +460,10 @@ function PaymentStep({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="font-display text-2xl font-semibold tracking-tight">Ödeme</h2>
+          <h2 className="font-display text-2xl font-semibold tracking-tight">Ödeme</h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          Ödeme iyzico güvenli altyapısı üzerinden işlenir. Tutar, teslimat onayına kadar emanette tutulur.
+          Ödeme, lisanslı ödeme kuruluşu iyzico altyapısında 3D Secure ile alınır. Hakediş, teslimat
+          onayı ve iade penceresi sonunda — komisyon otomatik kesilerek — satıcıya aktarılır.
         </p>
       </div>
 
@@ -502,10 +503,11 @@ function PaymentStep({
           <div className="mt-6 flex items-start gap-2 rounded-xl border border-primary/15 bg-primary/[0.04] p-3 text-xs text-muted-foreground">
             <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
             <div>
-              <p className="font-medium text-foreground">Emanet ödeme (Escrow)</p>
+              <p className="font-medium text-foreground">Pazaryeri ödemesi · iyzico</p>
               <p className="mt-0.5">
-                Ödenen tutar teslimat onayına kadar iyzico altyapısında güvende tutulur.
-                Üreticiye ancak teslimat tamamlandığında aktarılır.
+                Tutar lisanslı ödeme kuruluşu iyzico tarafından alıcı bankasından çekilir, satıcı için
+                hakediş olarak takip edilir. Teslimat onayı ve iade penceresi tamamlandıktan sonra
+                komisyon otomatik kesilerek satıcı hesabına aktarılır. Sanda parayı tutan taraf değildir.
               </p>
             </div>
           </div>
@@ -524,7 +526,7 @@ function PaymentStep({
             <Link href={'/yasal/on-bilgilendirme' as Route} className="text-primary underline" target="_blank">
               ön bilgilendirme formu
             </Link>
-            'nu okudum ve onaylıyorum.
+            &apos;nu okudum ve onaylıyorum.
           </span>
         </label>
         <label className="flex items-start gap-2">

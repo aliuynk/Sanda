@@ -29,9 +29,10 @@ import { protectedProcedure, router, sellerProcedure } from '../trpc';
  * Multi-seller cart checkout.
  *
  * We split the cart into N Orders by sellerId, each with its own payment
- * intent. This keeps escrow, shipping, and disputes clean. The payment
- * provider (iyzico submerchant) returns a top-level charge which we link to
- * the N payments via a shared `providerRef`.
+ * intent. This keeps PSP submerchant balances, shipping, and disputes clean.
+ * The payment provider (iyzico) collects the top-level charge as a marketplace
+ * payment and splits per-seller proceeds via subMerchantKey/subMerchantPrice;
+ * Sanda is not the money-holding party.
  */
 export const orderRouter = router({
   // --- Buyer -----------------------------------------------------------------

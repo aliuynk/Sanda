@@ -31,8 +31,8 @@ export default function AboutPage() {
             <div>
               <h2 className="font-display text-lg font-semibold">Pazar yeri + operasyon</h2>
               <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                Yalnızca liste sayfası değil: sipariş bölme, emanet ödeme, kargo soy ağacı ve üretici
-                paneli aynı tip sisteminde birleşir.
+                Yalnızca liste sayfası değil: sipariş bölme, lisanslı PSP üzerinden submerchant
+                hakediş, kargo soy ağacı ve üretici paneli aynı tip sisteminde birleşir.
               </p>
             </div>
           </CardContent>

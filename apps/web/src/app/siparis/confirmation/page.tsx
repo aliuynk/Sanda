@@ -44,10 +44,11 @@ export default function OrderConfirmationPage() {
               </div>
 
               <div className="rounded-xl border border-primary/15 bg-primary/[0.04] p-4 text-xs text-muted-foreground">
-                <p className="font-medium text-foreground">Emanet ödeme aktif</p>
+                <p className="font-medium text-foreground">Pazaryeri ödemesi · iyzico hakediş</p>
                 <p className="mt-1">
-                  Ödeme tutarı iyzico güvenli altyapısında emanette tutulur.
-                  Teslimat onayından sonra üreticiye aktarılır.
+                  Tutar lisanslı ödeme kuruluşu iyzico tarafından alındı. Teslimat onayı ve iade
+                  penceresi tamamlandığında komisyon otomatik kesilerek satıcıya aktarılır. Süreç
+                  uçtan uca panelden takip edilebilir.
                 </p>
               </div>
 

@@ -1,3 +1,4 @@
+import { adminRouter } from './routers/admin';
 import { authRouter } from './routers/auth';
 import { cartRouter } from './routers/cart';
 import { catalogRouter } from './routers/catalog';
@@ -17,6 +18,7 @@ export const appRouter = router({
   orders: orderRouter,
   geo: geoRouter,
   messaging: messagingRouter,
+  admin: adminRouter,
 });
 
 export type AppRouter = typeof appRouter;

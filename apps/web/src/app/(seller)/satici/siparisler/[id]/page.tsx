@@ -293,7 +293,7 @@ export default async function SellerOrderDetailPage({
                 <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                   Alıcı notu
                 </h3>
-                <p className="text-sm italic text-muted-foreground">"{order.buyerNotes}"</p>
+                <p className="text-sm italic text-muted-foreground">&ldquo;{order.buyerNotes}&rdquo;</p>
               </CardContent>
             </Card>
           )}

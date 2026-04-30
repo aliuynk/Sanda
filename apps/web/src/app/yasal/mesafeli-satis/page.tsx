@@ -52,8 +52,11 @@ export default function DistanceSellingPage() {
 
         <h2>4. Ödeme şekli</h2>
         <p>
-          Ödemeler lisanslı ödeme kuruluşu (iyzico) üzerinden güvenli şekilde işlenir.
-          Tutar, teslimat onayına kadar emanette (escrow) tutulur.
+          Ödemeler lisanslı ödeme kuruluşu iyzico (BDDK kayıtlı elektronik para kuruluşu) üzerinden
+          işlenir. Sanda parayı tutan taraf değildir. Her satıcı için açılan iyzico submerchant
+          hesabına alıcı tutarı hakediş olarak tanımlanır; teslimat onayı ve iade penceresi sonunda
+          komisyon otomatik kesilerek satıcı IBAN’ına aktarılır. Fatura, e-arşiv ve müstahsil
+          makbuzu gibi belgeler satıcı adına oluşur.
         </p>
 
         <h2>5. Teslimat</h2>

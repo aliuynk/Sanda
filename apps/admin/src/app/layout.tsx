@@ -1,54 +1,82 @@
 import './globals.css';
 
-import { cn } from '@sanda/ui-web';
-import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
-import Link from 'next/link';
+import type { Metadata, Viewport } from 'next';
+import { Inter, Playfair_Display } from 'next/font/google';
 
-const inter = Inter({ subsets: ['latin', 'latin-ext'], variable: '--font-sans' });
+import { AdminShell } from '@/components/admin-shell';
+import { TrpcProvider } from '@/trpc/provider';
+import { getCurrentPrincipal, getServerTrpc } from '@/trpc/server';
+
+import { LoginGate } from './login-gate';
+
+const sans = Inter({ subsets: ['latin', 'latin-ext'], variable: '--font-sans', display: 'swap' });
+const display = Playfair_Display({
+  subsets: ['latin', 'latin-ext'],
+  variable: '--font-display',
+  display: 'swap',
+});
 
 export const metadata: Metadata = {
-  title: { default: 'Sanda Admin', template: '%s · Sanda Admin' },
+  title: { default: 'Sanda Operasyon', template: '%s · Sanda Ops' },
+  description: 'Sanda iç operasyon paneli — üretici onayı, sertifika doğrulama ve sipariş gözetimi.',
   robots: { index: false, follow: false },
 };
 
-const nav = [
-  { href: '/', label: 'Panel' },
-  { href: '/uretici-basvurulari', label: 'Üretici başvuruları' },
-  { href: '/sertifikalar', label: 'Sertifikalar' },
-  { href: '/siparisler', label: 'Siparişler' },
-  { href: '/uyusmazliklar', label: 'Uyuşmazlıklar' },
-  { href: '/kullanicilar', label: 'Kullanıcılar' },
-  { href: '/icerik', label: 'İçerik' },
-];
+export const viewport: Viewport = {
+  themeColor: '#1a1610',
+  width: 'device-width',
+  initialScale: 1,
+};
 
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
+export default async function AdminLayout({ children }: { children: React.ReactNode }) {
+  const principal = await getCurrentPrincipal();
+  const isAuthorised = principal?.roles.some((r) =>
+    ['ADMIN', 'MODERATOR', 'SUPPORT'].includes(r),
+  );
+
+  let pendingCounts: { sellers: number; certifications: number; disputes: number } | undefined;
+  let principalProfile: { displayName: string; initials: string; role: string } = {
+    displayName: 'Operatör',
+    initials: 'OP',
+    role: 'ADMIN',
+  };
+
+  if (isAuthorised) {
+    try {
+      const trpc = await getServerTrpc();
+      const stats = await trpc.admin.stats();
+      pendingCounts = {
+        sellers: stats.sellers.pending,
+        certifications: stats.certifications.pending,
+        disputes: stats.orders.disputed,
+      };
+      const me = await trpc.auth.me();
+      const first = me.profile?.firstName ?? '';
+      const last = me.profile?.lastName ?? '';
+      const display = me.profile?.displayName || `${first} ${last}`.trim() || me.phone || 'Operatör';
+      const initials = (first[0] ?? '') + (last[0] ?? '');
+      principalProfile = {
+        displayName: display,
+        initials: (initials || display.slice(0, 2)).toUpperCase(),
+        role: me.roles[0] ?? 'ADMIN',
+      };
+    } catch {
+      pendingCounts = undefined;
+    }
+  }
+
   return (
-    <html lang="tr" className={inter.variable}>
-      <body className={cn('flex min-h-screen bg-background font-sans')}>
-        <aside className="hidden w-60 border-r bg-card p-4 md:block">
-          <div className="mb-6 font-display text-lg font-semibold">Sanda · Admin</div>
-          <nav className="flex flex-col gap-1 text-sm">
-            {nav.map((n) => (
-              <Link
-                key={n.href}
-                href={n.href}
-                className="rounded-md px-2 py-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              >
-                {n.label}
-              </Link>
-            ))}
-          </nav>
-        </aside>
-        <div className="flex-1">
-          <header className="flex h-14 items-center justify-between border-b px-6 text-sm">
-            <span>Operasyon paneli</span>
-            <span className="text-muted-foreground">
-              İç kullanım — dış paylaşıma uygun değildir.
-            </span>
-          </header>
-          <main className="p-8">{children}</main>
-        </div>
+    <html lang="tr" suppressHydrationWarning className={`${sans.variable} ${display.variable}`}>
+      <body className="min-h-screen bg-background font-sans text-foreground antialiased">
+        <TrpcProvider>
+          {isAuthorised ? (
+            <AdminShell principal={principalProfile} pendingCounts={pendingCounts}>
+              {children}
+            </AdminShell>
+          ) : (
+            <LoginGate />
+          )}
+        </TrpcProvider>
       </body>
     </html>
   );

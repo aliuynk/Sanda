@@ -269,7 +269,7 @@ export function ProductForm({
               <div>
                 <p className="text-sm font-medium">Mevsimlik ürün mü?</p>
                 <p className="text-xs text-muted-foreground">
-                  Mevsimlik ürünler sezon dışında "mevsim dışı" olarak işaretlenir.
+                  Mevsimlik ürünler sezon dışında &ldquo;mevsim dışı&rdquo; olarak işaretlenir.
                 </p>
               </div>
               <Switch checked={isSeasonal} onCheckedChange={setIsSeasonal} />

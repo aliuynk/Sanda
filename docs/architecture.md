@@ -159,7 +159,8 @@ panel's "dead letters" view.
 ## 12. Roadmap milestones
 
 1. **MVP (web)** — buyer discovery, seller onboarding, catalog, cart,
-   escrow checkout, seller dashboard, certifications, basic admin review.
+   PSP-marketplace checkout, seller dashboard, certifications, basic admin
+   review.
 2. **Operations** — kargo integrations, cert registry auto-verification,
    payout automation, dispute workflow.
 3. **Mobile seller app** — orders, one-tap mark-shipped, in-field camera

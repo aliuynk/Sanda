@@ -52,7 +52,7 @@ const categories = [
     title: 'Ödeme ve iade',
     questions: [
       'Hangi ödeme yöntemlerini kabul ediyorsunuz?',
-      'Emanet ödeme (escrow) nasıl çalışır?',
+      'iyzico hakediş ve satıcı aktarımı nasıl çalışır?',
       'İade koşulları nelerdir?',
     ],
   },

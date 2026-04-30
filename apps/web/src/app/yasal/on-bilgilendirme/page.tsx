@@ -40,9 +40,10 @@ export default function PreInfoPage() {
 
         <h2>3. Ödeme bilgileri</h2>
         <p>
-          Ödemeler, BDDK lisanslı ödeme kuruluşu iyzico üzerinden işlenir. Kart bilgileri
-          platformda saklanmaz. Ödeme tutarı emanet (escrow) sisteminde teslimat onayına
-          kadar güvenle tutulur.
+          Ödemeler, BDDK lisanslı elektronik para kuruluşu iyzico üzerinden 3D Secure ile işlenir.
+          Kart bilgileri platformda saklanmaz. Tutar, satıcı için açılan iyzico submerchant hesabına
+          hakediş olarak kaydedilir; teslimat onayı ve iade penceresi sonunda komisyon otomatik
+          kesilerek satıcı IBAN’ına aktarılır.
         </p>
 
         <h2>4. Teslimat koşulları</h2>

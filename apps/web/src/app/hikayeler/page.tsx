@@ -69,10 +69,10 @@ const stories: Story[] = [
     readTime: '6 dk',
   },
   {
-    slug: 'ciftlikten-sofraya-guvence',
-    title: 'Çiftlikten sofraya güvence: emanet ödeme sistemi',
+    slug: 'pazaryeri-odeme-modeli',
+    title: 'Pazaryeri ödemesi nasıl çalışır: iyzico submerchant ve hakediş',
     summary:
-      'Sanda\'nın emanet (escrow) ödeme modelinin alıcı ve satıcıyı nasıl koruduğunu öğren.',
+      'Sanda parayı tutan taraf değildir. Lisanslı ödeme kuruluşu üzerinden satıcı bazlı hakediş ve teslimat sonrası aktarımın detayları.',
     category: 'Platform',
     author: 'Sanda Editör',
     date: '2026-04-05',

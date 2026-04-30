@@ -200,8 +200,11 @@ export function LegalInfoStep({
 
       <Alert tone="info">
         <AlertDescription>
-          Ödemeler iyzico altyapısı üzerinden emanet hesapta tutulur; teslimat sonrası IBAN’ına
-          aktarılır.
+          Ödemeler lisanslı ödeme kuruluşu iyzico (BDDK kayıtlı elektronik para kuruluşu) üzerinden
+          alınır. Onaylanınca her satıcı için bir <strong>iyzico submerchant</strong> hesabı
+          oluşturulur; teslimat onayı ve iade penceresi sonunda komisyon otomatik kesilerek tutar bu
+          IBAN’a aktarılır. Sanda emanet para tutmaz; vergisel sorumluluk satıcıdadır, biz
+          e-belge/raporlamayı otomatikleştiririz.
         </AlertDescription>
       </Alert>
 

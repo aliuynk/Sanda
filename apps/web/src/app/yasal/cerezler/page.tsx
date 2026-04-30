@@ -30,7 +30,7 @@ export default function CookiePolicyPage() {
 
         <h3>Analitik çerezler</h3>
         <p>
-          Ziyaretçi davranışını anonim olarak analiz etmek için kullanılır (PostHog, AB'de barındırılır).
+          Ziyaretçi davranışını anonim olarak analiz etmek için kullanılır (PostHog, AB&apos;de barındırılır).
         </p>
 
         <h3>İşlevsel çerezler</h3>

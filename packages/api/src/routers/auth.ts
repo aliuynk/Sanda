@@ -1,6 +1,13 @@
 import { ConflictError, NotFoundError, RateLimitedError, ValidationError } from '@sanda/core';
 import { UserRole, UserStatus } from '@sanda/db/types';
-import { registerBuyerInput, requestOtpInput, verifyOtpInput } from '@sanda/validation';
+import {
+  addressInput,
+  registerBuyerInput,
+  requestOtpInput,
+  updateAddressInput,
+  updateProfileInput,
+  verifyOtpInput,
+} from '@sanda/validation';
 import { z } from 'zod';
 
 import { guardedProcedure, protectedProcedure, router } from '../trpc';
@@ -94,6 +101,130 @@ export const authRouter = router({
       orderBy: [{ isDefault: 'desc' }, { createdAt: 'desc' }],
     });
   }),
+
+  createAddress: protectedProcedure.input(addressInput).mutation(async ({ ctx, input }) => {
+    return ctx.prisma.$transaction(async (tx) => {
+      if (input.isDefault) {
+        await tx.address.updateMany({
+          where: { accountId: ctx.principal.accountId, isDefault: true, archivedAt: null },
+          data: { isDefault: false },
+        });
+      }
+      const existingCount = await tx.address.count({
+        where: { accountId: ctx.principal.accountId, archivedAt: null },
+      });
+      return tx.address.create({
+        data: {
+          accountId: ctx.principal.accountId,
+          label: input.label,
+          recipient: input.recipient,
+          phone: input.phone,
+          line1: input.line1,
+          line2: input.line2,
+          districtId: input.districtId,
+          provinceCode: input.provinceCode,
+          postalCode: input.postalCode,
+          notes: input.notes,
+          isDefault: input.isDefault || existingCount === 0,
+        },
+      });
+    });
+  }),
+
+  updateAddress: protectedProcedure.input(updateAddressInput).mutation(async ({ ctx, input }) => {
+    const existing = await ctx.prisma.address.findFirst({
+      where: { id: input.id, accountId: ctx.principal.accountId, archivedAt: null },
+      select: { id: true },
+    });
+    if (!existing) throw new NotFoundError('Address', input.id);
+
+    return ctx.prisma.$transaction(async (tx) => {
+      if (input.patch.isDefault) {
+        await tx.address.updateMany({
+          where: {
+            accountId: ctx.principal.accountId,
+            isDefault: true,
+            archivedAt: null,
+            NOT: { id: input.id },
+          },
+          data: { isDefault: false },
+        });
+      }
+      return tx.address.update({
+        where: { id: input.id },
+        data: input.patch,
+      });
+    });
+  }),
+
+  deleteAddress: protectedProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const existing = await ctx.prisma.address.findFirst({
+        where: { id: input.id, accountId: ctx.principal.accountId, archivedAt: null },
+        select: { id: true, isDefault: true },
+      });
+      if (!existing) throw new NotFoundError('Address', input.id);
+
+      return ctx.prisma.$transaction(async (tx) => {
+        const archived = await tx.address.update({
+          where: { id: input.id },
+          data: { archivedAt: new Date(), isDefault: false },
+        });
+        if (existing.isDefault) {
+          const next = await tx.address.findFirst({
+            where: { accountId: ctx.principal.accountId, archivedAt: null },
+            orderBy: { createdAt: 'desc' },
+          });
+          if (next) {
+            await tx.address.update({
+              where: { id: next.id },
+              data: { isDefault: true },
+            });
+          }
+        }
+        return archived;
+      });
+    }),
+
+  setDefaultAddress: protectedProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const existing = await ctx.prisma.address.findFirst({
+        where: { id: input.id, accountId: ctx.principal.accountId, archivedAt: null },
+        select: { id: true },
+      });
+      if (!existing) throw new NotFoundError('Address', input.id);
+      return ctx.prisma.$transaction(async (tx) => {
+        await tx.address.updateMany({
+          where: { accountId: ctx.principal.accountId, archivedAt: null, isDefault: true },
+          data: { isDefault: false },
+        });
+        return tx.address.update({ where: { id: input.id }, data: { isDefault: true } });
+      });
+    }),
+
+  updateProfile: protectedProcedure
+    .input(updateProfileInput)
+    .mutation(async ({ ctx, input }) => {
+      const { firstName, lastName, displayName, email, marketingOptIn } = input;
+      const account = await ctx.prisma.account.update({
+        where: { id: ctx.principal.accountId },
+        data: {
+          ...(email !== undefined ? { email } : {}),
+          ...(marketingOptIn !== undefined ? { marketingOptIn } : {}),
+          profile: {
+            update: {
+              ...(firstName !== undefined ? { firstName } : {}),
+              ...(lastName !== undefined ? { lastName } : {}),
+              ...(displayName !== undefined ? { displayName } : {}),
+            },
+          },
+        },
+        include: { profile: true },
+      });
+      return account;
+    }),
 
   logout: protectedProcedure.input(z.object({})).mutation(async ({ ctx }) => {
     await ctx.prisma.session.update({

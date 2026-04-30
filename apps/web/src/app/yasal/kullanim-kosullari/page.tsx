@@ -26,8 +26,8 @@ export default function TermsPage() {
 
         <h2>1. Taraflar ve tanımlar</h2>
         <p>
-          İşbu Kullanım Koşulları, Sanda platformu ("Platform") ile platforma kayıt olan
-          tüm kullanıcılar ("Kullanıcı", "Alıcı" veya "Satıcı") arasındaki hukuki çerçeveyi belirler.
+          İşbu Kullanım Koşulları, Sanda platformu (&ldquo;Platform&rdquo;) ile platforma kayıt olan
+          tüm kullanıcılar (&ldquo;Kullanıcı&rdquo;, &ldquo;Alıcı&rdquo; veya &ldquo;Satıcı&rdquo;) arasındaki hukuki çerçeveyi belirler.
           Platform, aracı hizmet sağlayıcı (6563 sayılı Kanun kapsamında) olarak faaliyet gösterir.
         </p>
 
@@ -61,13 +61,13 @@ export default function TermsPage() {
         <h2>5. Fikri mülkiyet</h2>
         <p>
           Platform arayüzü, tasarımı ve yazılımına ilişkin tüm fikri mülkiyet hakları
-          Sanda'ya aittir. Kullanıcılar, yükledikleri içerikler üzerindeki haklarını korur.
+          Sanda&apos;ya aittir. Kullanıcılar, yükledikleri içerikler üzerindeki haklarını korur.
         </p>
 
         <h2>6. Kişisel verilerin korunması</h2>
         <p>
           Kişisel verilerin işlenmesi 6698 sayılı KVKK kapsamında gerçekleştirilir.
-          Detaylı bilgi için Gizlilik Politikası ve KVKK Aydınlatma Metni'ne başvurunuz.
+          Detaylı bilgi için Gizlilik Politikası ve KVKK Aydınlatma Metni&apos;ne başvurunuz.
         </p>
 
         <h2>7. Uyuşmazlık çözümü</h2>
